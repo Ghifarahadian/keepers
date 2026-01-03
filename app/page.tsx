@@ -1,23 +1,14 @@
 import { Header } from "@/components/header"
 import { Hero } from "@/components/hero"
-import { Features } from "@/components/features"
-import { ProductShowcase } from "@/components/product-showcase"
-import { About } from "@/components/about"
-import { Testimonials } from "@/components/testimonials"
-import { Social } from "@/components/social"
-import { Footer } from "@/components/footer"
+import { config } from "@/lib/config"
 
 export default function Home() {
+  const isComingSoon = config.comingSoonMode
+
   return (
-    <div className="min-h-screen">
-      <Header />
-      <Hero />
-      <ProductShowcase />
-      <Features />
-      <About />
-      <Testimonials />
-      <Social />
-      <Footer />
-    </div>
+    <main className="min-h-screen bg-[#f5f3ef]">
+      <Header variant={isComingSoon ? 'coming-soon' : 'default'} />
+      <Hero mode={isComingSoon ? 'coming-soon' : 'default'} />
+    </main>
   )
 }
