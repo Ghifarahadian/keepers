@@ -595,7 +595,7 @@ pnpm lint     # Check code quality
 1. **Clone the repository**:
    ```bash
    git clone <repository-url>
-   cd kenangan
+   cd keepers
    ```
 
 2. **Install dependencies**:
@@ -616,7 +616,7 @@ pnpm lint     # Check code quality
 ### Project Structure
 
 ```
-kenangan/
+keepers/
 ├── app/                      # Next.js App Router
 │   ├── layout.tsx           # Root layout
 │   ├── page.tsx             # Landing page
@@ -911,7 +911,7 @@ To export as static HTML:
 ### Complete Directory Tree
 
 ```
-kenangan/
+keepers/
 ├── .git/                           # Git version control
 ├── .next/                          # Next.js build output (ignored)
 ├── node_modules/                   # Dependencies (ignored)
