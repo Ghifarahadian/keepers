@@ -21,11 +21,8 @@ export function Hero() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            <Button size="lg" className="text-base">
-              Shop Photobooks
-            </Button>
-            <Button size="lg" variant="outline" className="text-base bg-transparent">
-              Shop Magazines
+            <Button size="lg" className="text-base px-8">
+              Create Custom Photobook
             </Button>
           </div>
 
