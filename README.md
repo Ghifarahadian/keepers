@@ -1,30 +1,80 @@
-# Pixory website clone
+# KEEPERS
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+A minimal, elegant landing page for a custom photobook service.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/ghifarirahadian-9406s-projects/v0-pixory-website-clone)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/tVOlWpcoBHg)
+![KEEPERS Landing Page](mockup/mockup.jpeg)
 
-## Overview
+## Features
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+- Clean, minimal design
+- Responsive layout
+- Serif typography
+- Simple navigation
+- Toggleable "Coming Soon" mode
+- Environment-based configuration
 
-## Deployment
+## Tech Stack
 
-Your project is live at:
+- **Next.js 16** - React framework
+- **React 19** - UI library
+- **TypeScript** - Type safety
+- **Tailwind CSS 4** - Styling
+- **Lucide React** - Icons
 
-**[https://vercel.com/ghifarirahadian-9406s-projects/v0-pixory-website-clone](https://vercel.com/ghifarirahadian-9406s-projects/v0-pixory-website-clone)**
+## Getting Started
 
-## Build your app
+Install dependencies:
 
-Continue building your app on:
+```bash
+pnpm install
+```
 
-**[https://v0.app/chat/tVOlWpcoBHg](https://v0.app/chat/tVOlWpcoBHg)**
+Run development server:
 
-## How It Works
+```bash
+pnpm dev
+```
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Build
+
+```bash
+pnpm build
+pnpm start
+```
+
+## Project Structure
+
+```
+keepers/
+├── app/              # Next.js app directory
+├── components/       # React components
+├── lib/              # Configuration & utilities
+├── mockup/          # Design mockup
+├── public/          # Static assets
+└── CLAUDE.md        # Detailed documentation
+```
+
+## Coming Soon Mode
+
+Toggle between full landing page and "coming soon" mode using environment variables.
+
+### Quick Start
+
+1. Copy `.env.local.example` to `.env.local`
+2. Set `NEXT_PUBLIC_COMING_SOON_MODE=true`
+3. Restart dev server
+
+### Vercel Deployment
+
+Add environment variable in Vercel Dashboard:
+- **Key**: `NEXT_PUBLIC_COMING_SOON_MODE`
+- **Value**: `true`
+- **Environment**: Production
+
+See [CLAUDE.md](CLAUDE.md) for detailed documentation.
+
+## License
+
+Private project.

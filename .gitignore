@@ -16,8 +16,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# lock files (use pnpm only)
+package-lock.json
+yarn.lock
+
 # env files
 .env*
+!.env.local.example
 
 # vercel
 .vercel
@@ -25,3 +30,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# vscode
+/.vscode/

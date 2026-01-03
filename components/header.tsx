@@ -1,69 +1,35 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
-import { Menu, X } from "lucide-react"
-import { useState } from "react"
+import { Search, Menu } from "lucide-react"
 
-export function Header() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+interface HeaderProps {
+  variant?: 'default' | 'coming-soon'
+}
+
+export function Header({ variant = 'default' }: HeaderProps) {
+  const isComingSoon = variant === 'coming-soon'
 
   return (
-    <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          <div className="font-bold text-2xl text-primary">memorybook</div>
-
-          <nav className="hidden md:flex items-center gap-8">
-            <a href="#products" className="text-sm hover:text-primary transition-colors">
-              Products
-            </a>
-            <a href="#about" className="text-sm hover:text-primary transition-colors">
-              About
-            </a>
-            <a href="#testimonials" className="text-sm hover:text-primary transition-colors">
-              Reviews
-            </a>
-            <a href="#contact" className="text-sm hover:text-primary transition-colors">
-              Contact
-            </a>
-          </nav>
-
-          <div className="hidden md:flex items-center gap-4">
-            <Button variant="ghost" size="sm">
-              Sign In
-            </Button>
-            <Button size="sm">Create Book</Button>
+    <header className="fixed top-0 left-0 right-0 bg-[#f5f3ef] border-b border-gray-200 z-50">
+      <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className={`flex items-center ${isComingSoon ? 'justify-center' : 'justify-between'}`}>
+          {/* Logo */}
+          <div className="text-2xl font-bold tracking-tight">
+            KEEPERS
           </div>
 
-          <button className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-          </button>
-        </div>
-
-        {mobileMenuOpen && (
-          <div className="md:hidden py-4 space-y-4">
-            <a href="#products" className="block text-sm hover:text-primary transition-colors">
-              Products
-            </a>
-            <a href="#about" className="block text-sm hover:text-primary transition-colors">
-              About
-            </a>
-            <a href="#testimonials" className="block text-sm hover:text-primary transition-colors">
-              Reviews
-            </a>
-            <a href="#contact" className="block text-sm hover:text-primary transition-colors">
-              Contact
-            </a>
-            <div className="pt-4 space-y-2">
-              <Button variant="ghost" size="sm" className="w-full">
-                Sign In
-              </Button>
-              <Button size="sm" className="w-full">
-                Create Book
-              </Button>
+          {/* Right side icons - only show in default mode */}
+          {!isComingSoon && (
+            <div className="flex items-center gap-6">
+              <button className="hover:opacity-70 transition-opacity">
+                <Search className="w-6 h-6" />
+              </button>
+              <button className="hover:opacity-70 transition-opacity">
+                <Menu className="w-6 h-6" />
+              </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </header>
   )
