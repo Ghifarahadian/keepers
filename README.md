@@ -26,13 +26,13 @@ A minimal, elegant landing page for a custom photobook service.
 Install dependencies:
 
 ```bash
-npm install
+pnpm install
 ```
 
 Run development server:
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
@@ -40,8 +40,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## Build
 
 ```bash
-npm run build
-npm start
+pnpm build
+pnpm start
 ```
 
 ## Project Structure
