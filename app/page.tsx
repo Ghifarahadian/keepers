@@ -1,14 +1,14 @@
-import { Header } from "@/components/header"
-import { Hero } from "@/components/hero"
-import { config } from "@/lib/config"
+import { LandingHeader } from "@/components/landing-header"
+import { Hero } from "@/components/landing-hero"
+import { getUserProfile } from "@/lib/auth-actions"
 
-export default function Home() {
-  const isComingSoon = config.comingSoonMode
+export default async function Home() {
+  const user = await getUserProfile()
 
   return (
-    <main className="min-h-screen bg-[#f5f3ef]">
-      <Header variant={isComingSoon ? 'coming-soon' : 'default'} />
-      <Hero mode={isComingSoon ? 'coming-soon' : 'default'} />
+    <main className="min-h-screen bg-[var(--color-primary-bg)]">
+      <LandingHeader user={user} />
+      <Hero />
     </main>
   )
 }

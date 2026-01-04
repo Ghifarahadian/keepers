@@ -5,6 +5,9 @@ import "./globals.css"
 export const metadata: Metadata = {
   title: "KEEPERS - Your Story, Well Kept",
   description: "For the moments worth more than a scroll. Create beautiful custom photobooks.",
+  icons: {
+    icon: "/icon.png",
+  },
 }
 
 export default function RootLayout({
@@ -14,7 +17,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="font-serif antialiased">
+      <body className="antialiased">
         {children}
       </body>
     </html>

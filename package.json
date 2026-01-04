@@ -5,14 +5,20 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
+    "dev:clean": "rimraf .next & next dev",
     "lint": "eslint .",
     "start": "next start"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.89.0",
     "lucide-react": "^0.454.0",
     "next": "16.0.10",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "react-icons": "^5.5.0",
+    "resend": "^6.6.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",
@@ -20,6 +26,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "postcss": "^8.5",
+    "rimraf": "^6.1.2",
     "tailwindcss": "^4.1.9",
     "typescript": "^5"
   }

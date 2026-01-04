@@ -6,7 +6,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
- 
+  // Configure server-only modules
+  serverExternalPackages: ['pg', 'bcryptjs'],
 }
 
 export default nextConfig
