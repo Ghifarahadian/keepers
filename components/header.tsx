@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Search } from "lucide-react";
 import { AuthModal } from "./auth-modal";
-import { UserMenu } from "./user-menu";
+import { UserMenu } from "./auth-user-menu";
 
 interface HeaderProps {
   variant?: "default" | "coming-soon";

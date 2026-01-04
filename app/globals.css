@@ -7,6 +7,10 @@
     box-sizing: border-box;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
     -webkit-font-smoothing: antialiased;
