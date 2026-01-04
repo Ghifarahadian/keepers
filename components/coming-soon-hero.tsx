@@ -5,9 +5,9 @@ export function ComingSoonHero() {
     <section className="min-h-screen flex flex-col items-center justify-center px-6 bg-[var(--color-primary-bg)]">
       <div className="max-w-4xl mx-auto text-center space-y-8">
         <h1 className="text-6xl md:text-7xl lg:text-8xl leading-tight text-[var(--color-primary-text)]">
-          Your Stories,
+          Your Story,
           <br />
-          Well-Kept.
+          Well Kept.
         </h1>
 
         <p className="text-lg md:text-xl text-[var(--color-primary-text)] font-light pt-4">
