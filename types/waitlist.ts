@@ -16,3 +16,14 @@ export interface WaitlistResponse {
   error?: string
   success?: boolean
 }
+
+export interface WaitlistRecord {
+  id: string
+  email: string
+  ip_address: string | null
+  user_agent: string | null
+  unsubscribed: boolean
+  unsubscribed_at: string | null
+  created_at: string
+  updated_at: string
+}

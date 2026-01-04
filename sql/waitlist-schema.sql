@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS public.waitlist (
   email VARCHAR(255) NOT NULL,
   ip_address INET,
   user_agent TEXT,
+  unsubscribed BOOLEAN DEFAULT FALSE,
+  unsubscribed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT unique_email UNIQUE (email)
@@ -24,6 +26,7 @@ CREATE TABLE IF NOT EXISTS public.waitlist (
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_waitlist_email ON public.waitlist(email);
 CREATE INDEX IF NOT EXISTS idx_waitlist_created_at ON public.waitlist(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_waitlist_unsubscribed ON public.waitlist(unsubscribed) WHERE unsubscribed = FALSE;
 
 -- Disable Row Level Security for public waitlist
 -- RLS is disabled because:

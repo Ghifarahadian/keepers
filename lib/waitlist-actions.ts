@@ -3,6 +3,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { validateEmail } from "@/lib/validation"
 import { headers } from "next/headers"
+import { sendWaitlistWelcomeEmail } from "@/lib/email/send-waitlist-welcome"
 import type { WaitlistFormData, WaitlistResponse } from "@/types/waitlist"
 
 /**
@@ -35,7 +36,8 @@ export async function joinWaitlist(
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
-    const { data, error } = await supabase
+    // First, try to insert as new user
+    let { data, error } = await supabase
       .from("waitlist")
       .insert({
         email: normalizedEmail,
@@ -45,19 +47,68 @@ export async function joinWaitlist(
       .select()
       .single()
 
-    // 5. Handle errors
-    if (error) {
-      // Duplicate email (unique constraint violation)
-      if (error.code === "23505") {
+    // 5. Handle duplicate email (re-subscription case)
+    if (error && error.code === "23505") {
+      // Check if user was previously unsubscribed
+      const { data: existingUser } = await supabase
+        .from("waitlist")
+        .select("id, unsubscribed")
+        .eq("email", normalizedEmail)
+        .single()
+
+      if (existingUser && existingUser.unsubscribed) {
+        // Re-subscribe: update unsubscribed status
+        const { data: updatedData, error: updateError } = await supabase
+          .from("waitlist")
+          .update({
+            unsubscribed: false,
+            unsubscribed_at: null,
+            ip_address: ip,
+            user_agent: userAgent,
+          })
+          .eq("email", normalizedEmail)
+          .select()
+          .single()
+
+        if (updateError) {
+          console.error("Re-subscription error:", updateError)
+          return { error: "Something went wrong. Please try again." }
+        }
+
+        // Use updated data for response
+        data = updatedData
+        error = null
+      } else {
+        // User is already subscribed (not unsubscribed)
         return { error: "This email is already on our waitlist!" }
       }
-
-      // Log error for debugging but return generic message to user
+    } else if (error) {
+      // Other errors
       console.error("Waitlist signup error:", error)
       return { error: "Something went wrong. Please try again." }
     }
 
-    // 6. Return success
+    // Ensure data exists
+    if (!data) {
+      return { error: "Something went wrong. Please try again." }
+    }
+
+    // 6. Send welcome email (non-blocking)
+    try {
+      await sendWaitlistWelcomeEmail({
+        email: normalizedEmail,
+        waitlistId: data.id,
+      })
+    } catch (emailError) {
+      // Log error but don't fail the request
+      console.error("Failed to send welcome email:", {
+        email: normalizedEmail,
+        error: emailError instanceof Error ? emailError.message : "Unknown error",
+      })
+      // DO NOT return error to user - they successfully joined waitlist
+    }
+
+    // 7. Return success
     return {
       data: {
         id: data.id,
