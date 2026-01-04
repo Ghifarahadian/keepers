@@ -17,7 +17,7 @@ export function SocialLinks() {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={label}
-          className="text-gray-600 hover:text-gray-900 transition-colors"
+          className="text-[var(--color-primary-text)] hover:text-[var(--color-primary-text-muted)] transition-colors"
         >
           <Icon className="w-5 h-5" />
         </a>

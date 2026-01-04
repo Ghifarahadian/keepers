@@ -98,8 +98,8 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#f5f3ef] rounded-lg max-w-md w-full p-8 relative">
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg max-w-md w-full p-8 relative">
         {/* Close button */}
         <button
           onClick={onClose}
@@ -153,7 +153,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             <div className="w-full border-t border-gray-300"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-[#f5f3ef] text-gray-500">Or</span>
+            <span className="px-2 bg-white text-gray-500">Or</span>
           </div>
         </div>
 
@@ -168,7 +168,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 onChange={(e) =>
                   setFormData({ ...formData, firstName: e.target.value })
                 }
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#d4786c]"
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
                 required
               />
               <input
@@ -178,7 +178,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 onChange={(e) =>
                   setFormData({ ...formData, lastName: e.target.value })
                 }
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#d4786c]"
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
                 required
               />
             </div>
@@ -191,7 +191,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             onChange={(e) =>
               setFormData({ ...formData, email: e.target.value })
             }
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#d4786c] mb-4"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] mb-4"
             required
           />
 
@@ -202,7 +202,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             onChange={(e) =>
               setFormData({ ...formData, password: e.target.value })
             }
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#d4786c] mb-4"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] mb-4"
             required
           />
 
@@ -213,7 +213,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 id="remember"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="w-4 h-4 text-[#d4786c] border-gray-300 rounded focus:ring-[#d4786c]"
+                className="w-4 h-4 text-[var(--color-accent)] border-gray-300 rounded focus:ring-[var(--color-accent)]"
               />
               <label htmlFor="remember" className="ml-2 text-sm text-gray-700">
                 Remember me
@@ -224,7 +224,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#d4786c] hover:bg-[#c26b5f] text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+            className="w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
           >
             {loading
               ? "Loading..."
@@ -241,7 +241,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               Don't have an account?{" "}
               <button
                 onClick={() => setView("signup")}
-                className="text-[#d4786c] hover:underline font-medium"
+                className="text-[var(--color-accent)] hover:underline font-medium"
               >
                 Sign up
               </button>
@@ -251,7 +251,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               Already have an account?{" "}
               <button
                 onClick={() => setView("login")}
-                className="text-[#d4786c] hover:underline font-medium"
+                className="text-[var(--color-accent)] hover:underline font-medium"
               >
                 Sign in
               </button>
