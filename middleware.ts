@@ -1,8 +1,21 @@
-import { type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
-  return await updateSession(request);
+  // Handle session refresh first
+  const supabaseResponse = await updateSession(request);
+
+  // Check if coming soon mode is enabled
+  const isComingSoonMode = process.env.NEXT_PUBLIC_COMING_SOON_MODE === 'true';
+
+  // Redirect / to /coming-soon when in coming soon mode
+  if (isComingSoonMode && request.nextUrl.pathname === '/') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/coming-soon';
+    return NextResponse.redirect(url);
+  }
+
+  return supabaseResponse;
 }
 
 export const config = {

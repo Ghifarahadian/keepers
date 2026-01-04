@@ -357,5 +357,91 @@ See [.env.local.example](.env.local.example) for complete reference.
 
 ---
 
-**Project Version**: 4.0.0 (With Supabase Authentication)
+## Waitlist Feature
+
+### Overview
+
+KEEPERS includes a fully functional waitlist system on a dedicated `/coming-soon` route. Users can submit their email to be notified when the product launches.
+
+### Architecture
+
+**Route**: `/coming-soon` (separate from main landing page)
+
+**Components**:
+- [components/coming-soon-hero.tsx](components/coming-soon-hero.tsx) - Hero with "Coming Soon" text and scroll arrow
+- [components/waitlist-form.tsx](components/waitlist-form.tsx) - Email signup form with validation
+- [components/social-links.tsx](components/social-links.tsx) - Instagram & TikTok links
+
+**Database**: `public.waitlist` table in Supabase
+- Email collection with UNIQUE constraint
+- IP address and user agent tracking (spam prevention)
+- **RLS is DISABLED** (safe for public submissions, no sensitive data)
+
+### Data Flow
+
+1. User enters email in [waitlist-form.tsx](components/waitlist-form.tsx)
+2. Client-side validation using [lib/validation.ts](lib/validation.ts)
+3. Form calls [lib/waitlist-actions.ts](lib/waitlist-actions.ts) server action
+4. Server validates, normalizes email (lowercase + trim)
+5. Inserts into `public.waitlist` table via direct Supabase client
+6. Handles duplicates gracefully (Postgres error 23505)
+7. Shows success message with "Back to top" arrow
+
+### Key Features
+
+- ✅ **Email Validation**: Client + server side
+- ✅ **Duplicate Prevention**: UNIQUE constraint + friendly error messages
+- ✅ **Success State**: Replaces form with thank you message
+- ✅ **Smooth Scrolling**: Hero → Waitlist sections
+- ✅ **Social Links**: Sticky footer with Instagram & TikTok
+- ✅ **Back to Top**: Arrow on success page
+- ✅ **Spam Prevention**: IP & user agent tracking
+
+### Database Setup
+
+Run [sql/waitlist-schema.sql](sql/waitlist-schema.sql) in Supabase SQL Editor:
+
+```sql
+CREATE TABLE public.waitlist (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email VARCHAR(255) UNIQUE NOT NULL,
+  ip_address INET,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS is DISABLED for public signups
+ALTER TABLE public.waitlist DISABLE ROW LEVEL SECURITY;
+GRANT INSERT ON public.waitlist TO anon, authenticated;
+```
+
+### Middleware Redirect
+
+When `NEXT_PUBLIC_COMING_SOON_MODE=true`, [middleware.ts](middleware.ts) redirects `/` → `/coming-soon`:
+
+```typescript
+if (isComingSoonMode && request.nextUrl.pathname === '/') {
+  const url = request.nextUrl.clone();
+  url.pathname = '/coming-soon';
+  return NextResponse.redirect(url);
+}
+```
+
+**Important**: Turbopack caches environment variables. After changing `.env.local`, run:
+```bash
+rm -rf .next && pnpm dev
+```
+
+### Social Media Links
+
+Configured in [components/social-links.tsx](components/social-links.tsx):
+- **Instagram**: https://www.instagram.com/keepers_id/
+- **TikTok**: https://www.tiktok.com/@thisisarinok
+
+Links open in new tabs with `target="_blank"` and `rel="noopener noreferrer"`.
+
+---
+
+**Project Version**: 5.0.0 (With Waitlist Feature)
 **Framework**: Next.js 16.0.10 + React 19.2.0 + Supabase 2.89.0

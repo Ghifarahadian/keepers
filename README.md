@@ -14,7 +14,13 @@ A minimal, elegant landing page for a custom photobook service.
   - Google OAuth integration
   - User profile management
   - Automatic session refresh
-- Toggleable "Coming Soon" mode
+- **Coming Soon Page** with waitlist
+  - Email collection with validation
+  - Supabase database integration
+  - Social media links (Instagram, TikTok)
+  - Smooth scroll between sections
+  - Success confirmation page
+- Toggleable landing/coming-soon modes
 - Environment-based configuration
 
 ## Tech Stack
@@ -37,7 +43,9 @@ pnpm install
 ### 2. Set Up Supabase
 
 1. Create a Supabase project at [supabase.com](https://supabase.com)
-2. Run the database schema from `sql/schema-supabase.sql` in Supabase SQL Editor
+2. Run the database schemas in Supabase SQL Editor:
+   - `sql/schema-supabase.sql` (auth profiles table)
+   - `sql/waitlist-schema.sql` (waitlist table)
 3. Get your project URL and anon key from Supabase Dashboard → Settings → API
 
 ### 3. Configure Environment
@@ -69,36 +77,59 @@ pnpm start
 
 ```
 keepers/
-├── app/              # Next.js app directory
-│   ├── api/auth/     # Authentication API routes
-│   ├── layout.tsx    # Root layout
-│   └── page.tsx      # Homepage (Server Component)
-├── components/       # React components
-│   ├── auth-modal.tsx    # Login/Signup modal
-│   ├── header.tsx        # Navigation
-│   ├── hero.tsx          # Hero section
-│   └── user-menu.tsx     # User dropdown
-├── lib/              # Business logic & utilities
-│   ├── auth-actions.ts   # Server actions
-│   ├── supabase/         # Supabase clients
-│   └── validation.ts     # Input validation
-├── types/            # TypeScript definitions
-├── sql/              # Database schema
-├── middleware.ts     # Session refresh
-├── mockup/          # Design mockup
-├── public/          # Static assets
-└── CLAUDE.md        # Detailed documentation
+├── app/                      # Next.js app directory
+│   ├── api/auth/             # Authentication API routes
+│   ├── coming-soon/          # Coming soon page route
+│   ├── layout.tsx            # Root layout
+│   └── page.tsx              # Landing page (Server Component)
+├── components/               # React components
+│   ├── auth-modal.tsx        # Login/Signup modal
+│   ├── auth-user-menu.tsx    # User dropdown menu
+│   ├── coming-soon-hero.tsx  # Coming soon hero section
+│   ├── header.tsx            # Navigation header
+│   ├── landing-hero.tsx      # Landing page hero
+│   ├── social-links.tsx      # Social media icons
+│   └── waitlist-form.tsx     # Email waitlist form
+├── lib/                      # Business logic & utilities
+│   ├── auth-actions.ts       # Auth server actions
+│   ├── waitlist-actions.ts   # Waitlist server actions
+│   ├── supabase/             # Supabase clients
+│   └── validation.ts         # Input validation
+├── types/                    # TypeScript definitions
+│   ├── auth.ts               # Auth types
+│   └── waitlist.ts           # Waitlist types
+├── sql/                      # Database schemas
+│   ├── schema-supabase.sql   # Auth & profiles
+│   └── waitlist-schema.sql   # Waitlist table
+├── middleware.ts             # Session refresh & redirects
+├── mockup/                   # Design mockup
+├── public/                   # Static assets
+└── CLAUDE.md                 # Detailed documentation
 ```
 
 ## Coming Soon Mode
 
-Toggle between full landing page and "coming soon" mode using environment variables.
+Toggle between full landing page and "coming soon" page with waitlist using environment variables.
+
+### What Changes
+
+- **`NEXT_PUBLIC_COMING_SOON_MODE=true`**: Redirects `/` to `/coming-soon` page
+  - Shows waitlist form for email collection
+  - Displays social media links
+  - Simple centered header
+
+- **`NEXT_PUBLIC_COMING_SOON_MODE=false`** (or unset): Shows full landing page
+  - "Start Your Book" CTA button
+  - Full navigation with search and login
 
 ### Quick Start
 
 1. Copy `.env.local.example` to `.env.local`
 2. Set `NEXT_PUBLIC_COMING_SOON_MODE=true`
-3. Restart dev server
+3. **Important**: Delete `.next` folder and restart dev server
+   ```bash
+   rm -rf .next && pnpm dev
+   ```
 
 ### Vercel Deployment
 
