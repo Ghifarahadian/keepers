@@ -4,7 +4,7 @@ import { FaInstagram, FaTiktok } from "react-icons/fa"
 
 const socialLinks = [
   { icon: FaInstagram, href: "https://www.instagram.com/keepers_id/", label: "Instagram" },
-  { icon: FaTiktok, href: "https://www.tiktok.com/@thisisarinok", label: "TikTok" }
+  { icon: FaTiktok, href: "https://www.tiktok.com/@keepers_id", label: "TikTok" }
 ]
 
 export function SocialLinks() {

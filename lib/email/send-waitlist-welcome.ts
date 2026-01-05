@@ -170,7 +170,7 @@ function buildEmailHtml(email: string, unsubscribeUrl: string): string {
                     <a href="https://www.instagram.com/keepers_id/" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 12px 24px; background-color: #FF6F61; color: #FDFDFD; text-decoration: none; border-radius: 24px; font-size: 14px; font-weight: 500;">Instagram</a>
                   </td>
                   <td style="padding: 0 12px;">
-                    <a href="https://www.tiktok.com/@thisisarinok" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 12px 24px; background-color: #FF6F61; color: #FDFDFD; text-decoration: none; border-radius: 24px; font-size: 14px; font-weight: 500;">TikTok</a>
+                    <a href="https://www.tiktok.com/@keepers_id" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 12px 24px; background-color: #FF6F61; color: #FDFDFD; text-decoration: none; border-radius: 24px; font-size: 14px; font-weight: 500;">TikTok</a>
                   </td>
                 </tr>
               </table>
