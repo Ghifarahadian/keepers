@@ -22,7 +22,7 @@ What to Expect:
 
 Stay Connected:
 Instagram: https://www.instagram.com/keepers_id/
-TikTok: https://www.tiktok.com/@thisisarinok
+TikTok: https://www.tiktok.com/@keepers_id
 
 For the moments worth more than a scroll.
 

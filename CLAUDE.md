@@ -437,7 +437,7 @@ rm -rf .next && pnpm dev
 
 Configured in [components/social-links.tsx](components/social-links.tsx):
 - **Instagram**: https://www.instagram.com/keepers_id/
-- **TikTok**: https://www.tiktok.com/@thisisarinok
+- **TikTok**: https://www.tiktok.com/@keepers_id
 
 Links open in new tabs with `target="_blank"` and `rel="noopener noreferrer"`.
 
