@@ -1,8 +1,10 @@
 "use client"
 
 import { ArrowRight, ChevronUp } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 export function Hero() {
+  const router = useRouter()
   return (
     <section className="min-h-screen flex flex-col items-center justify-center px-6 pt-20 bg-[var(--color-primary-bg)]">
       <div className="max-w-4xl mx-auto text-center space-y-8">
@@ -22,7 +24,10 @@ export function Hero() {
 
         {/* CTA Button */}
         <div className="pt-4">
-          <button className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[var(--color-primary-text)] px-8 py-4 rounded-full text-lg font-medium flex items-center gap-2 mx-auto transition-colors shadow-lg">
+          <button
+            onClick={() => router.push("/editor/new")}
+            className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[var(--color-primary-text)] px-8 py-4 rounded-full text-lg font-medium flex items-center gap-2 mx-auto transition-colors shadow-lg"
+          >
             Start Your Book
             <ArrowRight className="w-5 h-5" />
           </button>

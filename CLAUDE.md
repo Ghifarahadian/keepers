@@ -1,13 +1,13 @@
-# KEEPERS - Minimal Landing Page
+# KEEPERS - Custom Photobook Platform
 
-> **Project**: KEEPERS - Custom Photobook Landing Page
+> **Project**: KEEPERS - Custom Photobook Landing Page & Editor
 > **Last Updated**: January 2026
 
 ---
 
 ## Project Overview
 
-KEEPERS is a minimal, elegant landing page for a custom photobook service. The design focuses on simplicity with a clean hero section and minimal navigation.
+KEEPERS is a custom photobook platform featuring a minimal landing page and a full-featured photobook editor. The design focuses on simplicity with a clean hero section and an intuitive drag-and-drop editor for creating personalized photobooks.
 
 **Brand Identity:**
 - **Name**: KEEPERS
@@ -25,8 +25,12 @@ KEEPERS is a minimal, elegant landing page for a custom photobook service. The d
 | **TypeScript** | 5.x | Type-safe JavaScript |
 | **Tailwind CSS** | 4.1.9 | Utility-first CSS framework |
 | **Lucide React** | 0.454.0 | Icon library |
-| **Supabase** | 2.89.0 | Authentication & Database |
+| **Supabase** | 2.89.0 | Authentication, Database & Storage |
 | **@supabase/ssr** | 0.8.0 | Supabase SSR utilities |
+| **@dnd-kit/core** | 6.3.1 | Drag and drop functionality |
+| **@dnd-kit/sortable** | 10.0.0 | Sortable drag and drop |
+| **@dnd-kit/utilities** | 3.2.2 | DnD utilities |
+| **Resend** | 6.6.0 | Email service |
 
 ---
 
@@ -39,6 +43,12 @@ keepers/
 │   │   └── auth/
 │   │       └── callback/
 │   │           └── route.ts    # OAuth callback handler
+│   ├── editor/
+│   │   ├── [projectId]/
+│   │   │   ├── page.tsx        # Project editor page (Server Component)
+│   │   │   └── loading.tsx     # Loading state
+│   │   └── new/
+│   │       └── page.tsx        # New project / project selector
 │   ├── layout.tsx              # Root layout with metadata
 │   ├── page.tsx                # Main landing page (Server Component)
 │   └── globals.css             # Global styles
@@ -46,20 +56,46 @@ keepers/
 │   ├── auth-modal.tsx          # Authentication modal (Client)
 │   ├── header.tsx              # Navigation header (Client)
 │   ├── hero.tsx                # Hero section (Client)
-│   └── user-menu.tsx           # User dropdown menu (Client)
+│   ├── user-menu.tsx           # User dropdown menu (Client)
+│   └── editor/                 # Photobook editor components
+│       ├── editor-layout.tsx   # Main editor layout with DnD context
+│       ├── editor-top-bar.tsx  # Top navigation bar
+│       ├── editor-sidebar.tsx  # Left sidebar (tabs: Photos, Layouts)
+│       ├── editor-canvas.tsx   # Main canvas area
+│       ├── editor-toolbar.tsx  # Right toolbar panel
+│       ├── editor-bottom-bar.tsx # Page navigation bar
+│       ├── photo-element.tsx   # Draggable/resizable photo on canvas
+│       ├── delete-button.tsx   # Reusable delete button component
+│       ├── project-selector-modal.tsx # Project selection modal
+│       └── panels/
+│           ├── photos-panel.tsx  # Photo upload and library panel
+│           └── layouts-panel.tsx # Layout selection panel
 ├── lib/
 │   ├── auth-actions.ts         # Server actions for authentication
+│   ├── editor-actions.ts       # Server actions for projects/pages/elements
+│   ├── photo-upload-actions.ts # Server actions for photo uploads
+│   ├── load-project-photos.ts  # Load and refresh signed URLs for photos
 │   ├── config.ts               # Feature flags & configuration
 │   ├── validation.ts           # Input validation utilities
+│   ├── contexts/
+│   │   └── editor-context.tsx  # Editor state management (React Context + Reducer)
 │   └── supabase/
 │       ├── client.ts           # Browser Supabase client
 │       ├── server.ts           # Server Supabase client
 │       └── middleware.ts       # Session refresh logic
 ├── types/
-│   └── auth.ts                 # TypeScript auth type definitions
+│   ├── auth.ts                 # TypeScript auth type definitions
+│   ├── waitlist.ts             # Waitlist type definitions
+│   └── editor.ts               # Editor type definitions (Project, Page, Element, Layout)
 ├── sql/
-│   ├── schema-supabase.sql     # Supabase database schema
+│   ├── schema-supabase.sql     # Auth/profiles database schema
+│   ├── waitlist-schema.sql     # Waitlist table schema
+│   ├── editor-schema.sql       # Editor tables schema (projects, pages, elements)
+│   ├── create-storage-bucket.sql # Storage bucket creation SQL
+│   ├── storage-setup.md        # Storage setup guide
 │   └── README.md               # Database setup instructions
+├── scripts/
+│   └── test-db-setup.ts        # Database setup verification script
 ├── mockup/
 │   └── mockup.jpeg             # Design mockup
 ├── public/                     # Static assets
@@ -177,6 +213,12 @@ pnpm start
 - Toggleable "Coming Soon" mode
 - Environment-based configuration
 - Server-side rendering with Next.js App Router
+- **Full-featured photobook editor**
+  - Drag-and-drop photo placement
+  - Multiple page layouts (Blank, Single, Double, Triple, Grid 4, Grid 6)
+  - Photo upload with Supabase Storage
+  - Project management (create, save, delete)
+  - Real-time element positioning and resizing
 
 ---
 
@@ -443,5 +485,212 @@ Links open in new tabs with `target="_blank"` and `rel="noopener noreferrer"`.
 
 ---
 
-**Project Version**: 5.0.0 (With Waitlist Feature)
+## Photobook Editor
+
+### Overview
+
+KEEPERS includes a full-featured photobook editor that allows authenticated users to create, edit, and manage custom photobooks. The editor features drag-and-drop photo placement, multiple layout options, and real-time saving.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Editor Page (/editor/[projectId])                              │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  EditorProvider (React Context)                           │  │
+│  │  - State: project, pages, elements, uploadedPhotos        │  │
+│  │  - Actions: addElement, updateElement, deleteElement      │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  DndContext (@dnd-kit)                                    │  │
+│  │  - Drag photos from sidebar to canvas                     │  │
+│  │  - Handles drag start/end events                          │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│  ┌─────────┬────────────────────────────┬──────────────────┐   │
+│  │ Sidebar │         Canvas             │     Toolbar      │   │
+│  │ (Photos)│   (Page with Elements)     │   (Properties)   │   │
+│  │ (Layout)│                            │                  │   │
+│  └─────────┴────────────────────────────┴──────────────────┘   │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  Bottom Bar (Page Navigation)                             │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Routes
+
+| Route | Description |
+|-------|-------------|
+| `/editor/new` | Project selector - create new or open existing project |
+| `/editor/[projectId]` | Edit a specific project |
+
+### Data Model
+
+**Projects** (`public.projects`)
+- `id` (UUID) - Primary key
+- `user_id` (UUID) - Owner (references auth.users)
+- `title` (VARCHAR) - Project name
+- `cover_photo_url` (TEXT) - Cover image URL
+- `status` (VARCHAR) - draft, completed, archived
+- `last_edited_at` (TIMESTAMPTZ) - Last modification time
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+
+**Pages** (`public.pages`)
+- `id` (UUID) - Primary key
+- `project_id` (UUID) - Parent project
+- `page_number` (INT) - Order in project
+- `layout_id` (VARCHAR) - Layout template ID
+- `title` (VARCHAR) - Optional page title
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+
+**Elements** (`public.elements`)
+- `id` (UUID) - Primary key
+- `page_id` (UUID) - Parent page
+- `type` (VARCHAR) - 'photo' or 'text'
+- `photo_url` (TEXT) - Signed URL for display
+- `photo_storage_path` (TEXT) - Storage path for regenerating URLs
+- `position_x`, `position_y` (FLOAT) - Position as percentage (0-100)
+- `width`, `height` (FLOAT) - Size as percentage (0-100)
+- `rotation` (FLOAT) - Rotation in degrees
+- `z_index` (INT) - Layer order
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+
+### Pre-defined Layouts
+
+| Layout ID | Name | Description |
+|-----------|------|-------------|
+| `blank` | Blank | Empty page with no photo zones |
+| `single` | Single | One large photo centered |
+| `double` | Double | Two photos side by side |
+| `triple` | Triple | One large photo with two smaller ones |
+| `grid-4` | Grid 4 | 2x2 grid of equal photos |
+| `grid-6` | Grid 6 | 2x3 grid of equal photos |
+
+Layouts are defined in [types/editor.ts](types/editor.ts) with zone positions as percentages.
+
+### Photo Storage
+
+Photos are stored in Supabase Storage in a private bucket called `project-photos`.
+
+**Storage Structure:**
+```
+project-photos/
+└── {user_id}/
+    └── {project_id}/
+        ├── 1234567890-abc123.jpg
+        ├── 1234567891-def456.png
+        └── ...
+```
+
+**Key Features:**
+- Private bucket with RLS policies
+- Users can only access their own photos
+- Signed URLs (1-year expiry) for secure access
+- URLs regenerated on project load via [lib/load-project-photos.ts](lib/load-project-photos.ts)
+- Max file size: 10MB
+- Supported formats: JPEG, PNG, WEBP, HEIC
+
+### Server Actions
+
+**Project Actions** ([lib/editor-actions.ts](lib/editor-actions.ts)):
+- `createProject(input?)` - Create new project with first page
+- `getProject(projectId)` - Fetch project with pages and elements
+- `updateProject(projectId, updates)` - Update project metadata
+- `deleteProject(projectId)` - Delete project and all related data
+- `getUserProjects()` - List all projects for current user
+
+**Page Actions**:
+- `createPage(input)` - Add page to project
+- `updatePage(pageId, updates)` - Update page (layout, title)
+- `deletePage(pageId, projectId)` - Remove page
+- `reorderPages(projectId, pageIds)` - Reorder pages
+
+**Element Actions**:
+- `createElement(input)` - Add element to page
+- `updateElement(elementId, updates)` - Update element position/properties
+- `deleteElement(elementId)` - Remove element
+- `batchUpdateElements(updates)` - Update multiple elements
+- `batchDeleteElements(elementIds)` - Delete multiple elements
+
+**Photo Actions** ([lib/photo-upload-actions.ts](lib/photo-upload-actions.ts)):
+- `uploadPhoto(file, projectId)` - Upload single photo
+- `uploadMultiplePhotos(files, projectId)` - Upload multiple photos
+- `deletePhoto(path)` - Delete photo from storage
+- `deleteMultiplePhotos(paths)` - Delete multiple photos
+- `getPhotoUrl(path)` - Get signed URL for photo
+- `listProjectPhotos(projectId)` - List all photos in project
+
+### Editor State Management
+
+The editor uses React Context with useReducer for state management ([lib/contexts/editor-context.tsx](lib/contexts/editor-context.tsx)).
+
+**State:**
+```typescript
+interface EditorState {
+  project: Project
+  pages: Page[]
+  currentPageId: string
+  elements: Record<string, Element[]> // Keyed by pageId
+  uploadedPhotos: UploadedPhoto[]
+  selectedElementId: string | null
+  isSaving: boolean
+  lastSaved: string | null
+  error: string | null
+}
+```
+
+**Available Actions:**
+- `SET_PROJECT`, `SET_PAGES`, `SET_CURRENT_PAGE`
+- `UPDATE_PROJECT_TITLE`, `ADD_PAGE`, `DELETE_PAGE`, `REORDER_PAGES`
+- `UPDATE_PAGE_LAYOUT`, `SET_ELEMENTS`, `ADD_ELEMENT`
+- `UPDATE_ELEMENT`, `DELETE_ELEMENT`, `SELECT_ELEMENT`
+- `ADD_UPLOADED_PHOTO`, `REMOVE_UPLOADED_PHOTO`
+- `SET_SAVING`, `SET_LAST_SAVED`, `SET_ERROR`
+
+### Editor Components
+
+| Component | Description |
+|-----------|-------------|
+| [EditorLayout](components/editor/editor-layout.tsx) | Main layout with DnD context |
+| [EditorTopBar](components/editor/editor-top-bar.tsx) | Project title, save status, navigation |
+| [EditorSidebar](components/editor/editor-sidebar.tsx) | Tabbed sidebar (Photos, Layouts) |
+| [EditorCanvas](components/editor/editor-canvas.tsx) | Main editing canvas with drop zone |
+| [EditorToolbar](components/editor/editor-toolbar.tsx) | Right panel for element properties |
+| [EditorBottomBar](components/editor/editor-bottom-bar.tsx) | Page thumbnails navigation |
+| [PhotoElement](components/editor/photo-element.tsx) | Draggable/resizable photo on canvas |
+| [PhotosPanel](components/editor/panels/photos-panel.tsx) | Photo upload and library |
+| [LayoutsPanel](components/editor/panels/layouts-panel.tsx) | Layout template selection |
+| [ProjectSelectorModal](components/editor/project-selector-modal.tsx) | Create/open project modal |
+
+### Database Setup
+
+Run [sql/editor-schema.sql](sql/editor-schema.sql) in Supabase SQL Editor to create:
+- `public.projects` table with RLS
+- `public.pages` table with RLS
+- `public.elements` table with RLS
+- Triggers for `updated_at` and `last_edited_at`
+
+Then set up storage bucket following [sql/storage-setup.md](sql/storage-setup.md):
+1. Create `project-photos` bucket (private)
+2. Run storage policies from [sql/create-storage-bucket.sql](sql/create-storage-bucket.sql)
+
+Verify setup with:
+```bash
+npx tsx scripts/test-db-setup.ts
+```
+
+### Security
+
+- **Row Level Security (RLS):** All tables protected
+  - Users can only access their own projects
+  - Pages inherit access from project ownership
+  - Elements inherit access from page → project ownership
+- **Storage Policies:** Users can only upload/view/delete photos in their own folder
+- **Server-Side Auth:** All actions verify user authentication
+- **Path Validation:** Photo deletion verifies path ownership
+
+---
+
+**Project Version**: 6.0.0 (With Photobook Editor)
 **Framework**: Next.js 16.0.10 + React 19.2.0 + Supabase 2.89.0
