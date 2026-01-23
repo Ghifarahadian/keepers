@@ -101,3 +101,49 @@ export async function getUserProfile() {
     lastName: profile?.last_name || "",
   };
 }
+
+export async function deleteAccount() {
+  const supabase = await createClient();
+
+  // 1. Get authenticated user
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (!user || userError) {
+    return { error: "Not authenticated" };
+  }
+
+  const userId = user.id;
+
+  // 2. Delete all photos from storage
+  try {
+    // List all files in user's folder
+    const { data: files, error: listError } = await supabase.storage
+      .from("project-photos")
+      .list(`${userId}`);
+
+    if (!listError && files && files.length > 0) {
+      // Delete all files
+      const filePaths = files.map((file) => `${userId}/${file.name}`);
+      await supabase.storage.from("project-photos").remove(filePaths);
+    }
+  } catch (storageError) {
+    // Log error but continue - storage can be cleaned up later
+    console.error("Storage deletion error:", storageError);
+  }
+
+  // 3. Delete database records via Postgres function
+  // Call database function that uses SECURITY DEFINER to delete from auth.users
+  const { error: dbError } = await supabase.rpc("delete_user_account");
+
+  if (dbError) {
+    return { error: dbError.message };
+  }
+
+  // 4. Sign out and redirect
+  await signOut();
+
+  return { success: true };
+}

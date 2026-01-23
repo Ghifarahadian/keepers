@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, User, Settings, LogOut } from "lucide-react";
 import { signOut } from "@/lib/auth-actions";
 
@@ -9,6 +10,7 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ firstName }: UserMenuProps) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -56,7 +58,7 @@ export function UserMenu({ firstName }: UserMenuProps) {
           </button>
           <button
             onClick={() => {
-              // Navigate to settings
+              router.push("/settings");
               setIsOpen(false);
             }}
             className="w-full px-4 py-2 text-left hover:bg-gray-100 flex items-center gap-3"
