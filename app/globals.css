@@ -15,11 +15,23 @@
     /* Secondary Colors */
     --color-secondary: #A7D8E8;
 
+    /* Background Colors */
+    --color-cream-bg: #f5f3ef;
+
     /* Neutral Colors */
     --color-white: #FDFDFD;
     --color-modal-bg: #FDFDFD;
     --color-border: #3d8387;
     --color-neutral: #2D3748;
+    --color-text-primary: #1a1a1a;
+    --color-text-secondary: #6b7280;
+    --color-text-muted: #9ca3af;
+
+    /* Danger Colors */
+    --color-danger: #dc2626;
+    --color-danger-hover: #b91c1c;
+    --color-danger-light: #fee2e2;
+    --color-danger-border: #fecaca;
 
     /* Typography */
     --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;

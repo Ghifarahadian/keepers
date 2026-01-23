@@ -39,20 +39,34 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
+    <div className="fixed inset-0 flex items-center justify-center z-50" style={{
+      backgroundColor: "rgba(0, 0, 0, 0.5)"
+    }}>
+      <div className="rounded-2xl p-8 max-w-md w-full mx-4" style={{
+        backgroundColor: "var(--color-modal-bg)"
+      }}>
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-red-600" />
+            <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{
+              backgroundColor: "var(--color-danger-light)"
+            }}>
+              <AlertTriangle className="w-6 h-6" style={{ color: "var(--color-danger)" }} />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900">Delete Account</h2>
+            <h2 className="text-2xl font-bold" style={{
+              color: "var(--color-text-primary)",
+              fontFamily: "var(--font-serif)"
+            }}>
+              Delete Account
+            </h2>
           </div>
           <button
             onClick={onClose}
             disabled={loading}
-            className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+            className="transition-colors disabled:opacity-50"
+            style={{ color: "var(--color-text-muted)" }}
+            onMouseEnter={(e) => !loading && (e.currentTarget.style.color = "var(--color-text-secondary)")}
+            onMouseLeave={(e) => !loading && (e.currentTarget.style.color = "var(--color-text-muted)")}
           >
             <X className="w-6 h-6" />
           </button>
@@ -60,10 +74,16 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
 
         {/* Warning Message */}
         <div className="mb-6">
-          <p className="text-gray-700 mb-4">
+          <p className="mb-4" style={{
+            color: "var(--color-text-secondary)",
+            fontFamily: "var(--font-sans)"
+          }}>
             This action is <strong>permanent and cannot be undone</strong>. Deleting your account will:
           </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 mb-4">
+          <ul className="list-disc list-inside space-y-2 mb-4" style={{
+            color: "var(--color-text-secondary)",
+            fontFamily: "var(--font-sans)"
+          }}>
             <li>Permanently delete all your projects and pages</li>
             <li>Remove all uploaded photos from storage</li>
             <li>Delete your profile and account information</li>
@@ -73,7 +93,10 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
 
         {/* Confirmation Input */}
         <div className="mb-6">
-          <label htmlFor="confirm-delete" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="confirm-delete" className="block text-sm font-medium mb-2" style={{
+            color: "var(--color-text-secondary)",
+            fontFamily: "var(--font-sans)"
+          }}>
             Type <span className="font-bold">DELETE</span> to confirm:
           </label>
           <input
@@ -83,14 +106,36 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
             onChange={(e) => setConfirmText(e.target.value)}
             disabled={loading}
             placeholder="Type DELETE here"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              borderColor: "var(--color-text-muted)",
+              fontFamily: "var(--font-sans)",
+              backgroundColor: "var(--color-white)"
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.outline = "none";
+              e.currentTarget.style.borderColor = "var(--color-danger)";
+              e.currentTarget.style.boxShadow = "0 0 0 2px var(--color-danger-light)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "var(--color-text-muted)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
           />
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-600 text-sm">{error}</p>
+          <div className="mb-6 p-4 border rounded-lg" style={{
+            backgroundColor: "var(--color-danger-light)",
+            borderColor: "var(--color-danger-border)"
+          }}>
+            <p className="text-sm" style={{
+              color: "var(--color-danger)",
+              fontFamily: "var(--font-sans)"
+            }}>
+              {error}
+            </p>
           </div>
         )}
 
@@ -99,14 +144,29 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
           <button
             onClick={onClose}
             disabled={loading}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            className="flex-1 px-4 py-2 border rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            style={{
+              borderColor: "var(--color-text-muted)",
+              color: "var(--color-text-primary)",
+              fontFamily: "var(--font-sans)",
+              backgroundColor: "transparent"
+            }}
+            onMouseEnter={(e) => !loading && (e.currentTarget.style.backgroundColor = "var(--color-cream-bg)")}
+            onMouseLeave={(e) => !loading && (e.currentTarget.style.backgroundColor = "transparent")}
           >
             Cancel
           </button>
           <button
             onClick={handleDelete}
             disabled={!isConfirmed || loading}
-            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            className="flex-1 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            style={{
+              backgroundColor: "var(--color-danger)",
+              color: "var(--color-white)",
+              fontFamily: "var(--font-sans)"
+            }}
+            onMouseEnter={(e) => !loading && !(!isConfirmed) && (e.currentTarget.style.backgroundColor = "var(--color-danger-hover)")}
+            onMouseLeave={(e) => !loading && (e.currentTarget.style.backgroundColor = "var(--color-danger)")}
           >
             {loading ? "Deleting..." : "Delete My Account"}
           </button>

@@ -42,7 +42,11 @@ keepers/
 │   ├── api/
 │   │   └── auth/
 │   │       └── callback/
-│   │           └── route.ts    # OAuth callback handler
+│   │           └── route.ts    # OAuth & email verification callback handler
+│   ├── auth/
+│   │   └── confirm/
+│   │       ├── page.tsx        # Email verification confirmation page
+│   │       └── loading.tsx     # Loading state for verification
 │   ├── editor/
 │   │   ├── [projectId]/
 │   │   │   ├── page.tsx        # Project editor page (Server Component)
@@ -98,6 +102,18 @@ keepers/
 │   └── test-db-setup.ts        # Database setup verification script
 ├── mockup/
 │   └── mockup.jpeg             # Design mockup
+├── email_templates/            # Email HTML templates
+│   ├── confirm-signup.html     # Email verification template
+│   ├── magic-link.html         # Magic link login template
+│   ├── reset-password.html     # Password reset template
+│   ├── change-email.html       # Email change confirmation template
+│   ├── waitlist-welcome.html   # Waitlist welcome email template
+│   └── README.md               # Email template documentation
+├── docs/                       # Documentation
+│   ├── resend-smtp-setup.md    # Resend SMTP configuration guide
+│   ├── email-templates.md      # Email template customization guide
+│   ├── SETUP-CHECKLIST.md      # Quick setup checklist
+│   └── README.md               # Documentation hub
 ├── public/                     # Static assets
 ├── middleware.ts               # Next.js middleware for session refresh
 ├── .env.local.example          # Environment variables example
@@ -127,6 +143,8 @@ keepers/
   - Google OAuth integration
   - Form validation
   - Error handling
+  - **Email verification flow** - Shows "Check Your Email" message when confirmation required
+  - Automatic detection of email confirmation status
 - Props: `isOpen: boolean`, `onClose: () => void`
 
 ### User Menu ([components/user-menu.tsx](components/user-menu.tsx))
@@ -227,10 +245,11 @@ pnpm start
 ### Overview
 
 KEEPERS uses **Supabase Auth** for user authentication and session management. The system supports:
-- Email/password authentication
+- Email/password authentication with **email verification**
 - Google OAuth (configurable)
 - Automatic session refresh via middleware
 - Secure row-level data access
+- Custom email templates with unified branding (teal theme)
 
 ### Architecture
 
@@ -280,9 +299,14 @@ See [sql/schema-supabase.sql](sql/schema-supabase.sql) for complete schema.
 - [middleware.ts](middleware.ts) - Next.js middleware entry point
 
 **Client-Side (runs in browser):**
-- [components/auth-modal.tsx](components/auth-modal.tsx) - Authentication UI
+- [components/auth-modal.tsx](components/auth-modal.tsx) - Authentication UI with email verification flow
 - [components/user-menu.tsx](components/user-menu.tsx) - User dropdown menu
 - [lib/supabase/client.ts](lib/supabase/client.ts) - Browser Supabase client
+- [app/auth/confirm/page.tsx](app/auth/confirm/page.tsx) - Email verification confirmation page
+
+**Email Templates:**
+- [email_templates/](email_templates/) - Standalone HTML email templates
+- [lib/email/send-waitlist-welcome.ts](lib/email/send-waitlist-welcome.ts) - Waitlist email sender (reads from template)
 
 **Shared:**
 - [types/auth.ts](types/auth.ts) - TypeScript type definitions
@@ -325,6 +349,101 @@ See [sql/schema-supabase.sql](sql/schema-supabase.sql) for complete schema.
 - **Automatic Session Refresh:** Middleware keeps sessions active
 - **Secure Cookie Handling:** Different strategies for server/client/edge
 - **Password Requirements:** 8+ characters, uppercase, lowercase, number
+- **Email Verification:** Optional email confirmation for new signups
+
+### Email Verification Flow
+
+When email confirmation is enabled in Supabase:
+
+1. **User Registration:**
+   - User fills out signup form
+   - Server creates account in Supabase
+   - Returns `needsEmailConfirmation: true` if verification required
+
+2. **Verification Pending:**
+   - Auth modal shows "Check Your Email" message
+   - User receives branded verification email (teal theme)
+   - Email contains verification link
+
+3. **Email Confirmation:**
+   - User clicks link in email
+   - Redirected to `/api/auth/callback` (handles OAuth & email verification)
+   - Then redirected to `/auth/confirm` for verification processing
+
+4. **Verification Success:**
+   - Shows "Email Verified!" success page
+   - Auto-redirects to home page after 3 seconds
+   - User can now sign in
+
+**Key Files:**
+- [lib/auth-actions.ts](lib/auth-actions.ts):33 - Email confirmation detection logic
+- [components/auth-modal.tsx](components/auth-modal.tsx):71 - Verification pending UI
+- [app/api/auth/callback/route.ts](app/api/auth/callback/route.ts):28 - Callback handler with type detection
+- [app/auth/confirm/page.tsx](app/auth/confirm/page.tsx) - Verification confirmation page
+
+---
+
+## Email Templates
+
+KEEPERS includes a complete set of branded email templates with a unified teal theme.
+
+### Template System
+
+All email templates share consistent branding:
+- **Teal background** (#2F6F73)
+- **Coral accent** (#FF6F61) for buttons
+- **White text** (#FDFDFD) for high contrast
+- **Serif typography** (Georgia/Cambria) for elegance
+- **Rounded buttons** (32px border-radius)
+- **Centered layout** with consistent spacing
+
+### Available Templates
+
+| Template | File | Use Case |
+|----------|------|----------|
+| **Email Verification** | [confirm-signup.html](email_templates/confirm-signup.html) | Sent after user registration |
+| **Magic Link** | [magic-link.html](email_templates/magic-link.html) | Passwordless login |
+| **Password Reset** | [reset-password.html](email_templates/reset-password.html) | Forgot password flow |
+| **Email Change** | [change-email.html](email_templates/change-email.html) | Confirm new email address |
+| **Waitlist Welcome** | [waitlist-welcome.html](email_templates/waitlist-welcome.html) | Waitlist signup (auto-sent via Resend) |
+
+### Supabase Email Setup
+
+1. **Configure Resend SMTP** (recommended for production):
+   - See [docs/resend-smtp-setup.md](docs/resend-smtp-setup.md) for full guide
+   - See [docs/SETUP-CHECKLIST.md](docs/SETUP-CHECKLIST.md) for quick setup
+   - Eliminates Supabase rate limits (4 emails/hour → 3,000/month)
+
+2. **Apply Email Templates:**
+   - Go to Supabase Dashboard → Authentication → Email Templates
+   - Copy HTML from [email_templates/](email_templates/) folder
+   - Paste into corresponding Supabase template
+   - Save
+
+3. **Enable Email Confirmation:**
+   - Supabase Dashboard → Authentication → Settings
+   - Toggle ON "Enable email confirmations"
+   - Users will now receive verification emails
+
+### Waitlist Email Integration
+
+The waitlist welcome email is **automatically sent** when users sign up on the `/coming-soon` page:
+
+- **Template File:** [email_templates/waitlist-welcome.html](email_templates/waitlist-welcome.html)
+- **Sender Code:** [lib/email/send-waitlist-welcome.ts](lib/email/send-waitlist-welcome.ts)
+- **How it works:** Code reads HTML template, replaces `{{EMAIL}}` and `{{UNSUBSCRIBE_URL}}` variables, sends via Resend API
+- **To customize:** Edit the HTML file directly, restart server
+
+### Template Customization
+
+All templates use inline styles (required for email clients). To modify:
+
+1. **Edit HTML directly:** Open any `.html` file in [email_templates/](email_templates/)
+2. **Update inline styles:** Change colors, fonts, spacing as needed
+3. **For Supabase templates:** Copy updated HTML and paste into Supabase
+4. **For waitlist template:** Just restart your server
+
+See [email_templates/README.md](email_templates/README.md) for detailed customization guide.
 
 ---
 

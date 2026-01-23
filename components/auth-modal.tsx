@@ -11,6 +11,8 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(false);
+  const [verificationPending, setVerificationPending] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
   // Form state
   const [formData, setFormData] = useState({
@@ -65,8 +67,14 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
         throw new Error(result.error);
       }
 
-      // User is automatically signed in after signup
-      onClose();
+      // Check if email confirmation is required
+      if (result.needsEmailConfirmation) {
+        setRegisteredEmail(formData.email);
+        setVerificationPending(true);
+      } else {
+        // User is automatically signed in after signup
+        onClose();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -108,10 +116,46 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           <X className="w-6 h-6" />
         </button>
 
-        {/* Header */}
-        <h2 className="text-3xl font-bold mb-6 text-center">
-          {view === "login" ? "Welcome Back" : "Create Account"}
-        </h2>
+        {/* Verification Pending View */}
+        {verificationPending ? (
+          <div className="text-center py-8">
+            <div className="mb-6">
+              <svg
+                className="w-20 h-20 mx-auto text-green-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76"
+                />
+              </svg>
+            </div>
+            <h2 className="text-3xl font-bold mb-4">Check Your Email</h2>
+            <p className="text-gray-700 mb-6 leading-relaxed">
+              Thank you for registering! We've sent a verification link to{" "}
+              <span className="font-semibold text-gray-900">{registeredEmail}</span>.
+            </p>
+            <p className="text-gray-600 text-sm mb-8">
+              Please click the link in the email to verify your account and complete your
+              registration.
+            </p>
+            <button
+              onClick={onClose}
+              className="w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white py-3 rounded-lg font-medium transition-colors"
+            >
+              Got It
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Header */}
+            <h2 className="text-3xl font-bold mb-6 text-center">
+              {view === "login" ? "Welcome Back" : "Create Account"}
+            </h2>
 
         {/* Error message */}
         {error && (
@@ -234,30 +278,32 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           </button>
         </form>
 
-        {/* Toggle view */}
-        <div className="mt-6 text-center text-sm text-gray-600">
-          {view === "login" ? (
-            <p>
-              Don't have an account?{" "}
-              <button
-                onClick={() => setView("signup")}
-                className="text-[var(--color-accent)] hover:underline font-medium"
-              >
-                Sign up
-              </button>
-            </p>
-          ) : (
-            <p>
-              Already have an account?{" "}
-              <button
-                onClick={() => setView("login")}
-                className="text-[var(--color-accent)] hover:underline font-medium"
-              >
-                Sign in
-              </button>
-            </p>
-          )}
-        </div>
+            {/* Toggle view */}
+            <div className="mt-6 text-center text-sm text-gray-600">
+              {view === "login" ? (
+                <p>
+                  Don't have an account?{" "}
+                  <button
+                    onClick={() => setView("signup")}
+                    className="text-[var(--color-accent)] hover:underline font-medium"
+                  >
+                    Sign up
+                  </button>
+                </p>
+              ) : (
+                <p>
+                  Already have an account?{" "}
+                  <button
+                    onClick={() => setView("login")}
+                    className="text-[var(--color-accent)] hover:underline font-medium"
+                  >
+                    Sign in
+                  </button>
+                </p>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ export async function signUp(formData: {
     email: formData.email,
     password: formData.password,
     options: {
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/confirm`,
       data: {
         first_name: formData.firstName,
         last_name: formData.lastName,
@@ -27,7 +28,15 @@ export async function signUp(formData: {
     return { error: error.message };
   }
 
-  return { data };
+  // Check if email confirmation is required
+  // When email confirmation is enabled in Supabase:
+  // - User is created but session is null (user needs to confirm email first)
+  // - email_confirmed_at will be null/undefined
+  // When confirmation is disabled:
+  // - Both user and session are returned immediately
+  const needsEmailConfirmation = !!(data.user && !data.session);
+
+  return { data, needsEmailConfirmation };
 }
 
 export async function signIn(formData: { email: string; password: string }) {
