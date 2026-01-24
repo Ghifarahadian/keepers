@@ -11,6 +11,7 @@
     /* Accent Colors */
     --color-accent: #FF6F61;
     --color-accent-hover: #e65a4d;
+    --color-accent-light: rgba(255, 111, 97, 0.15);
 
     /* Secondary Colors */
     --color-secondary: #A7D8E8;

@@ -126,17 +126,26 @@ export async function deleteAccount() {
 
   const userId = user.id;
 
-  // 2. Delete all photos from storage
+  // 2. Delete all photos from storage (recursively through project folders)
   try {
-    // List all files in user's folder
-    const { data: files, error: listError } = await supabase.storage
+    // List all project folders in user's folder
+    const { data: projectFolders, error: listError } = await supabase.storage
       .from("project-photos")
       .list(`${userId}`);
 
-    if (!listError && files && files.length > 0) {
-      // Delete all files
-      const filePaths = files.map((file) => `${userId}/${file.name}`);
-      await supabase.storage.from("project-photos").remove(filePaths);
+    if (!listError && projectFolders && projectFolders.length > 0) {
+      // For each project folder, list and delete all files inside
+      for (const folder of projectFolders) {
+        const folderPath = `${userId}/${folder.name}`;
+        const { data: files } = await supabase.storage
+          .from("project-photos")
+          .list(folderPath);
+
+        if (files && files.length > 0) {
+          const filePaths = files.map((file) => `${folderPath}/${file.name}`);
+          await supabase.storage.from("project-photos").remove(filePaths);
+        }
+      }
     }
   } catch (storageError) {
     // Log error but continue - storage can be cleaned up later

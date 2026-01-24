@@ -55,12 +55,12 @@ export function PictureContainer({ element }: PictureContainerProps) {
       element={element}
       toolbarActions={[
         ...(hasPhoto ? [{
-          icon: <ImageOff size={16} className="text-gray-600" />,
+          icon: <ImageOff size={16} />,
           onClick: handleRemovePhoto,
           title: "Remove photo",
         }] : []),
         {
-          icon: <Trash2 size={16} className="text-red-500" />,
+          icon: <Trash2 size={16} />,
           onClick: handleDelete,
           title: "Delete picture container",
           variant: "danger" as const

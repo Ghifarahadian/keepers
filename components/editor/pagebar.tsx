@@ -1,68 +1,80 @@
 "use client"
 
-import React, { memo, useRef, useEffect } from "react"
+import React, { memo } from "react"
 import { useEditor } from "@/lib/contexts/editor-context"
 import { Plus } from "lucide-react"
 import { createPage, deletePage } from "@/lib/editor-actions"
-import type { Page, Element, PageZone } from "@/types/editor"
+import type { Page, Element } from "@/types/editor"
 
 interface PageThumbnailProps {
   page: Page
-  zones: PageZone[]
   elements: Element[]
   uploadedPhotos: { path: string; url: string }[]
   isDragging: boolean
 }
 
-// Mini preview component for page thumbnails - renders zones with elements inside
-// Memoized to prevent re-renders during zone dragging
+// Mini preview component for page thumbnails - renders elements directly
+// Memoized to prevent re-renders during element dragging
 const PageThumbnail = memo(function PageThumbnail({
-  page,
-  zones,
   elements,
   uploadedPhotos,
 }: PageThumbnailProps) {
-  const isBlankLayout = page.layout_id === 'blank'
-
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: 'var(--color-white)' }}>
-      {zones.length === 0 && elements.length === 0 ? (
+      {elements.length === 0 ? (
         <div className="w-full h-full flex items-center justify-center">
           <span className="text-[8px]" style={{ color: 'var(--color-secondary)' }}>Empty</span>
         </div>
       ) : (
-        zones.map((zone) => {
-          const zoneElements = elements.filter(el => el.zone_index === zone.zone_index)
-          const element = zoneElements[0]
-
-          return (
-            <div
-              key={zone.id}
-              className="absolute overflow-hidden"
-              style={{
-                left: `${zone.position_x}%`,
-                top: `${zone.position_y}%`,
-                width: `${zone.width}%`,
-                height: `${zone.height}%`,
-                border: isBlankLayout ? 'none' : '1px dashed rgba(0,0,0,0.1)',
-              }}
-            >
-              {element && element.type === 'photo' && (() => {
-                const photo = uploadedPhotos.find(p => p.path === element.photo_storage_path)
-                const photoUrl = photo?.url || element.photo_url || ""
-                if (!photoUrl) return null
-                return (
-                  <img
-                    src={photoUrl}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    draggable={false}
-                  />
-                )
-              })()}
-            </div>
-          )
-        })
+        elements.map((element) => (
+          <div
+            key={element.id}
+            className="absolute overflow-hidden"
+            style={{
+              left: `${element.position_x}%`,
+              top: `${element.position_y}%`,
+              width: `${element.width}%`,
+              height: `${element.height}%`,
+              border: '1px dashed rgba(0,0,0,0.1)',
+            }}
+          >
+            {element.type === 'photo' && (() => {
+              const photo = uploadedPhotos.find(p => p.path === element.photo_storage_path)
+              const photoUrl = photo?.url || element.photo_url || ""
+              if (!photoUrl) return null
+              return (
+                <img
+                  src={photoUrl}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  draggable={false}
+                />
+              )
+            })()}
+            {element.type === 'text' && element.text_content && (() => {
+              // Scale font size relative to canvas (thumbnail is ~1/4 of canvas width)
+              const baseFontSize = element.font_size || 16
+              const scaledFontSize = Math.max(3, baseFontSize * 0.25)
+              return (
+                <div
+                  className="w-full h-full overflow-hidden p-0.5 flex items-end"
+                  style={{
+                    fontSize: `${scaledFontSize}px`,
+                    lineHeight: 1.2,
+                    fontFamily: element.font_family || 'var(--font-serif)',
+                    fontWeight: element.font_weight || 'normal',
+                    fontStyle: element.font_style || 'normal',
+                    textDecoration: element.text_decoration || 'none',
+                    textAlign: element.text_align || 'left',
+                    color: element.font_color || 'var(--color-neutral)',
+                  }}
+                >
+                  <span className="w-full">{element.text_content}</span>
+                </div>
+              )
+            })()}
+          </div>
+        ))
       )}
     </div>
   )
@@ -74,8 +86,6 @@ const PageThumbnail = memo(function PageThumbnail({
   // Otherwise, do shallow comparison
   return (
     prevProps.page.id === nextProps.page.id &&
-    prevProps.page.layout_id === nextProps.page.layout_id &&
-    prevProps.zones === nextProps.zones &&
     prevProps.elements === nextProps.elements &&
     prevProps.uploadedPhotos === nextProps.uploadedPhotos
   )
@@ -141,7 +151,6 @@ export function EditorPagebar() {
               {/* Page Preview */}
               <PageThumbnail
                 page={page}
-                zones={state.zones[page.id] || []}
                 elements={state.elements[page.id] || []}
                 uploadedPhotos={state.uploadedPhotos}
                 isDragging={state.isDraggingZone}

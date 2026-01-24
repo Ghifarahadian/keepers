@@ -3,7 +3,7 @@
 import type { Element } from "@/types/editor"
 import { useEditor } from "@/lib/contexts/editor-context"
 import { useRef, useCallback } from "react"
-import { ElementToolbar, type ToolbarAction } from "../ui/element-toolbar"
+import { PhotoToolbar, type ToolbarAction } from "../ui/photo-toolbar"
 
 type ResizeHandle = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top' | 'right' | 'bottom' | 'left'
 
@@ -35,6 +35,8 @@ export interface BaseElementContainerProps {
   innerClassName?: string
   /** External ref callback (e.g., for droppable) */
   externalRef?: (node: HTMLDivElement | null) => void
+  /** Custom toolbar to render (positioned outside overflow container) */
+  renderToolbar?: React.ReactNode
 }
 
 export function BaseElementContainer({
@@ -48,6 +50,7 @@ export function BaseElementContainer({
   onDoubleClick,
   innerClassName = "absolute inset-0 overflow-hidden",
   externalRef,
+  renderToolbar,
 }: BaseElementContainerProps) {
   const { state, selectElement, updateElementPosition, setDraggingZone } = useEditor()
 
@@ -261,8 +264,11 @@ export function BaseElementContainer({
       >
         {/* Mini toolbar */}
         {isSelected && showControls && toolbarActions.length > 0 && (
-          <ElementToolbar actions={toolbarActions} />
+          <PhotoToolbar actions={toolbarActions} />
         )}
+
+        {/* Custom toolbar (e.g., text properties) */}
+        {renderToolbar}
 
         {/* Resize handles */}
         {isSelected && showControls && (

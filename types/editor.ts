@@ -47,11 +47,15 @@ export interface Element {
   photo_url?: string | null
   photo_storage_path?: string | null
 
-  // Text fields (for future use)
+  // Text fields
   text_content?: string | null
   font_family?: string | null
   font_size?: number | null
   font_color?: string | null
+  font_weight?: 'normal' | 'bold' | 'light' | null
+  font_style?: 'normal' | 'italic' | null
+  text_align?: 'left' | 'center' | 'right' | null
+  text_decoration?: 'none' | 'underline' | null
 
   // Layout positioning (percentages 0-100)
   position_x: number
@@ -234,6 +238,10 @@ export interface CreateElementInput {
   font_family?: string
   font_size?: number
   font_color?: string
+  font_weight?: 'normal' | 'bold' | 'light'
+  font_style?: 'normal' | 'italic'
+  text_align?: 'left' | 'center' | 'right'
+  text_decoration?: 'none' | 'underline'
   position_x: number
   position_y: number
   width: number
@@ -250,6 +258,10 @@ export interface UpdateElementInput {
   font_family?: string
   font_size?: number
   font_color?: string
+  font_weight?: 'normal' | 'bold' | 'light'
+  font_style?: 'normal' | 'italic'
+  text_align?: 'left' | 'center' | 'right'
+  text_decoration?: 'none' | 'underline'
   position_x?: number
   position_y?: number
   width?: number

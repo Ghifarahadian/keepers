@@ -147,6 +147,35 @@ export async function deleteProject(projectId: string): Promise<void> {
     throw new Error("Unauthorized")
   }
 
+  // Verify ownership before deleting
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (projectError || !project) {
+    throw new Error("Project not found or unauthorized")
+  }
+
+  // Delete all photos from storage for this project
+  const folderPath = `${user.id}/${projectId}`
+  try {
+    const { data: files } = await supabase.storage
+      .from("project-photos")
+      .list(folderPath)
+
+    if (files && files.length > 0) {
+      const filePaths = files.map((file) => `${folderPath}/${file.name}`)
+      await supabase.storage.from("project-photos").remove(filePaths)
+    }
+  } catch (storageError) {
+    // Log error but continue with project deletion
+    console.error("Storage deletion error:", storageError)
+  }
+
+  // Delete project (cascades to pages, elements, zones via DB constraints)
   const { error } = await supabase
     .from("projects")
     .delete()

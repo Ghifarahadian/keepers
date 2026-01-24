@@ -1,10 +1,11 @@
 "use client"
 
-import type { Element } from "@/types/editor"
+import type { Element, UpdateElementInput } from "@/types/editor"
 import { useEditor } from "@/lib/contexts/editor-context"
 import { useRef, useCallback, useState, useEffect } from "react"
-import { Trash2, Type } from "lucide-react"
+import { Type } from "lucide-react"
 import { BaseElementContainer } from "./base-element-container"
+import { TextToolbar } from "../ui/text-toolbar"
 
 interface TextContainerProps {
   element: Element
@@ -55,12 +56,15 @@ export function TextContainer({ element }: TextContainerProps) {
     }
   }, [element.text_content])
 
-  const handleDelete = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation()
+  const handleDelete = useCallback(async () => {
     if (confirm("Delete this text container?")) {
       await deleteElementFromCanvas(element.id)
     }
   }, [element.id, deleteElementFromCanvas])
+
+  const handleTextPropertiesUpdate = useCallback((updates: UpdateElementInput) => {
+    updateElementPosition(element.id, updates)
+  }, [element.id, updateElementPosition])
 
   const borderColor = isSelected ? 'rgba(212, 120, 108, 1)'
     : textContent ? 'rgba(212, 120, 108, 0.3)'
@@ -73,20 +77,22 @@ export function TextContainer({ element }: TextContainerProps) {
   return (
     <BaseElementContainer
       element={element}
-      toolbarActions={[
-        {
-          icon: <Trash2 size={16} className="text-red-500" />,
-          onClick: handleDelete,
-          title: "Delete text container",
-          variant: "danger"
-        }
-      ]}
+      toolbarActions={[]}
       borderColor={borderColor}
       backgroundColor={bgColor}
       showControls={!isEditing}
       isDragDisabled={() => isEditing}
       onDoubleClick={handleDoubleClick}
       innerClassName="absolute inset-0 overflow-hidden p-2"
+      renderToolbar={
+        isSelected && !isEditing ? (
+          <TextToolbar
+            element={element}
+            onUpdate={handleTextPropertiesUpdate}
+            onDelete={handleDelete}
+          />
+        ) : undefined
+      }
     >
       {/* Empty state placeholder */}
       {!textContent && !isEditing && (
@@ -109,6 +115,10 @@ export function TextContainer({ element }: TextContainerProps) {
             fontFamily: element.font_family || 'var(--font-serif)',
             fontSize: element.font_size ? `${element.font_size}px` : '16px',
             color: element.font_color || 'var(--color-neutral)',
+            fontWeight: element.font_weight || 'normal',
+            fontStyle: element.font_style || 'normal',
+            textDecoration: element.text_decoration || 'none',
+            textAlign: element.text_align || 'left',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
           }}
@@ -130,6 +140,10 @@ export function TextContainer({ element }: TextContainerProps) {
             fontFamily: element.font_family || 'var(--font-serif)',
             fontSize: element.font_size ? `${element.font_size}px` : '16px',
             color: element.font_color || 'var(--color-neutral)',
+            fontWeight: element.font_weight || 'normal',
+            fontStyle: element.font_style || 'normal',
+            textDecoration: element.text_decoration || 'none',
+            textAlign: element.text_align || 'left',
           }}
           placeholder="Enter your text..."
         />

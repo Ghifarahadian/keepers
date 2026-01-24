@@ -359,11 +359,15 @@ CREATE TABLE IF NOT EXISTS public.elements (
   photo_url TEXT,
   photo_storage_path TEXT,
 
-  -- Text-specific fields (for future use)
+  -- Text-specific fields
   text_content TEXT,
   font_family VARCHAR(100),
   font_size INT,
-  font_color VARCHAR(7),
+  font_color VARCHAR(20),
+  font_weight VARCHAR(20) DEFAULT 'normal',
+  font_style VARCHAR(20) DEFAULT 'normal',
+  text_align VARCHAR(20) DEFAULT 'left',
+  text_decoration VARCHAR(20) DEFAULT 'none',
 
   -- Layout positioning (percentages for responsive design)
   position_x FLOAT NOT NULL,
@@ -514,3 +518,36 @@ ORDER BY table_name;
 
 -- Verify storage bucket:
 SELECT id, name, public FROM storage.buckets WHERE name = 'project-photos';
+
+-- ============================================
+-- MIGRATION: Add text styling columns to elements
+-- ============================================
+-- Run this if you have an existing database without these columns
+-- These statements are safe to run multiple times (IF NOT EXISTS)
+
+DO $$
+BEGIN
+  -- Add font_weight column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'elements' AND column_name = 'font_weight') THEN
+    ALTER TABLE public.elements ADD COLUMN font_weight VARCHAR(20) DEFAULT 'normal';
+  END IF;
+
+  -- Add font_style column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'elements' AND column_name = 'font_style') THEN
+    ALTER TABLE public.elements ADD COLUMN font_style VARCHAR(20) DEFAULT 'normal';
+  END IF;
+
+  -- Add text_align column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'elements' AND column_name = 'text_align') THEN
+    ALTER TABLE public.elements ADD COLUMN text_align VARCHAR(20) DEFAULT 'left';
+  END IF;
+
+  -- Add text_decoration column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'elements' AND column_name = 'text_decoration') THEN
+    ALTER TABLE public.elements ADD COLUMN text_decoration VARCHAR(20) DEFAULT 'none';
+  END IF;
+END $$;
