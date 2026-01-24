@@ -19,9 +19,11 @@ const createInitialState = (project: Project, uploadedPhotos?: UploadedPhoto[]):
   }, {} as Record<string, PageZone[]>) || {},
   uploadedPhotos: uploadedPhotos || [],
   selectedElementId: null,
+  selectedZoneId: null,
   isSaving: false,
   lastSaved: null,
   error: null,
+  isDraggingZone: false,
 })
 
 // Reducer
@@ -34,7 +36,7 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, pages: action.payload }
 
     case "SET_CURRENT_PAGE":
-      return { ...state, currentPageId: action.payload, selectedElementId: null }
+      return { ...state, currentPageId: action.payload, selectedElementId: null, selectedZoneId: null }
 
     case "UPDATE_PROJECT_TITLE":
       return {
@@ -131,7 +133,10 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case "SELECT_ELEMENT":
-      return { ...state, selectedElementId: action.payload }
+      return { ...state, selectedElementId: action.payload, selectedZoneId: null }
+
+    case "SELECT_ZONE":
+      return { ...state, selectedZoneId: action.payload, selectedElementId: null }
 
     case "ADD_UPLOADED_PHOTO":
       return {
@@ -153,6 +158,9 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
 
     case "SET_ERROR":
       return { ...state, error: action.payload }
+
+    case "SET_DRAGGING_ZONE":
+      return { ...state, isDraggingZone: action.payload }
 
     default:
       return state
@@ -179,8 +187,9 @@ interface EditorContextValue {
   selectElement: (elementId: string | null) => void
 
   // Zone actions
-  updateZoneLocal: (zoneId: string, updates: UpdateZoneInput) => void
+  selectZone: (zoneId: string | null) => void
   updateZonePosition: (zoneId: string, updates: UpdateZoneInput) => Promise<void>
+  setDraggingZone: (isDragging: boolean) => void
 
   // Photo actions
   addUploadedPhoto: (photo: UploadedPhoto) => void
@@ -293,9 +302,9 @@ export function EditorProvider({
     dispatch({ type: "SELECT_ELEMENT", payload: elementId })
   }, [])
 
-  // Update zone locally only (no server call) - for dragging/resizing
-  const updateZoneLocal = useCallback((zoneId: string, updates: UpdateZoneInput) => {
-    dispatch({ type: "UPDATE_ZONE", payload: { zoneId, updates } })
+  // Select zone (for empty zones)
+  const selectZone = useCallback((zoneId: string | null) => {
+    dispatch({ type: "SELECT_ZONE", payload: zoneId })
   }, [])
 
   // Update zone position and save to server
@@ -307,6 +316,11 @@ export function EditorProvider({
       console.error("Update zone error:", error)
       dispatch({ type: "SET_ERROR", payload: "Failed to update zone" })
     }
+  }, [])
+
+  // Set dragging zone state (for thumbnail optimization)
+  const setDraggingZone = useCallback((isDragging: boolean) => {
+    dispatch({ type: "SET_DRAGGING_ZONE", payload: isDragging })
   }, [])
 
   // Add uploaded photo
@@ -330,8 +344,9 @@ export function EditorProvider({
     updateElementPosition,
     deleteElementFromCanvas,
     selectElement,
-    updateZoneLocal,
+    selectZone,
     updateZonePosition,
+    setDraggingZone,
     addUploadedPhoto,
     removeUploadedPhoto,
   }

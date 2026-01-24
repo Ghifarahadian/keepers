@@ -44,19 +44,6 @@ export function EditorCanvas() {
             isBlankLayout={isBlankLayout && zone.zone_index === 0}
           />
         ))}
-
-        {currentElements.length === 0 && zones.length > 0 && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-            <div className="text-center">
-              <p className="text-lg font-medium" style={{ color: 'var(--color-secondary)', fontFamily: 'var(--font-serif)' }}>
-                Drag photos here
-              </p>
-              <p className="text-sm mt-2" style={{ color: 'var(--color-secondary)', fontFamily: 'var(--font-serif)' }}>
-                Drop into the layout zones
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

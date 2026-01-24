@@ -3,7 +3,7 @@
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, DragOverlay } from "@dnd-kit/core"
 import { EditorProvider, useEditor } from "@/lib/contexts/editor-context"
 import { EditorTopBar } from "./top-bar"
-import { EditorSidebar } from "./sidebar"
+import { EditorPagebar } from "./pagebar"
 import { EditorCanvas } from "./canvas"
 import { EditorToolbar } from "./toolbar"
 import { EditorBottomBar } from "./bottom-bar"
@@ -84,7 +84,7 @@ function EditorContent() {
       <div className="min-h-screen" style={{ backgroundColor: 'var(--color-primary-bg-light)' }}>
         <EditorTopBar />
         <div className="pt-16 pb-14">
-          <EditorSidebar />
+          <EditorPagebar />
           <main className="ml-60 mr-80">
             <EditorCanvas />
           </main>

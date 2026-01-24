@@ -1,59 +1,87 @@
 "use client"
 
+import React, { memo, useRef, useEffect } from "react"
 import { useEditor } from "@/lib/contexts/editor-context"
 import { Plus } from "lucide-react"
 import { createPage, deletePage } from "@/lib/editor-actions"
-import type { Page, Element } from "@/types/editor"
+import type { Page, Element, PageZone } from "@/types/editor"
 
-// Mini preview component for page thumbnails
-function PageThumbnail({ page, elements, uploadedPhotos }: {
+interface PageThumbnailProps {
   page: Page
+  zones: PageZone[]
   elements: Element[]
   uploadedPhotos: { path: string; url: string }[]
-}) {
+  isDragging: boolean
+}
+
+// Mini preview component for page thumbnails - renders zones with elements inside
+// Memoized to prevent re-renders during zone dragging
+const PageThumbnail = memo(function PageThumbnail({
+  page,
+  zones,
+  elements,
+  uploadedPhotos,
+}: PageThumbnailProps) {
+  const isBlankLayout = page.layout_id === 'blank'
+
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: 'var(--color-white)' }}>
-      {elements.length === 0 ? (
+      {zones.length === 0 && elements.length === 0 ? (
         <div className="w-full h-full flex items-center justify-center">
           <span className="text-[8px]" style={{ color: 'var(--color-secondary)' }}>Empty</span>
         </div>
       ) : (
-        elements.map((element) => {
-          if (element.type !== 'photo') return null
-
-          // Find the photo URL
-          const photo = uploadedPhotos.find(p => p.path === element.photo_storage_path)
-          const photoUrl = photo?.url || element.photo_url || ""
-
-          if (!photoUrl) return null
+        zones.map((zone) => {
+          const zoneElements = elements.filter(el => el.zone_index === zone.zone_index)
+          const element = zoneElements[0]
 
           return (
             <div
-              key={element.id}
+              key={zone.id}
               className="absolute overflow-hidden"
               style={{
-                left: `${element.position_x}%`,
-                top: `${element.position_y}%`,
-                width: `${element.width}%`,
-                height: `${element.height}%`,
-                transform: `rotate(${element.rotation}deg)`,
+                left: `${zone.position_x}%`,
+                top: `${zone.position_y}%`,
+                width: `${zone.width}%`,
+                height: `${zone.height}%`,
+                border: isBlankLayout ? 'none' : '1px dashed rgba(0,0,0,0.1)',
               }}
             >
-              <img
-                src={photoUrl}
-                alt=""
-                className="w-full h-full object-cover"
-                draggable={false}
-              />
+              {element && element.type === 'photo' && (() => {
+                const photo = uploadedPhotos.find(p => p.path === element.photo_storage_path)
+                const photoUrl = photo?.url || element.photo_url || ""
+                if (!photoUrl) return null
+                return (
+                  <img
+                    src={photoUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    draggable={false}
+                  />
+                )
+              })()}
             </div>
           )
         })
       )}
     </div>
   )
-}
+}, (prevProps, nextProps) => {
+  // Skip re-render if currently dragging
+  if (nextProps.isDragging) {
+    return true // Props are "equal" - don't re-render
+  }
+  // Otherwise, do shallow comparison
+  return (
+    prevProps.page.id === nextProps.page.id &&
+    prevProps.page.layout_id === nextProps.page.layout_id &&
+    prevProps.zones === nextProps.zones &&
+    prevProps.elements === nextProps.elements &&
+    prevProps.uploadedPhotos === nextProps.uploadedPhotos
+  )
+})
 
-export function EditorSidebar() {
+export function EditorPagebar() {
   const { state, setCurrentPage, dispatch } = useEditor()
 
   const handleAddPage = async () => {
@@ -113,8 +141,10 @@ export function EditorSidebar() {
               {/* Page Preview */}
               <PageThumbnail
                 page={page}
+                zones={state.zones[page.id] || []}
                 elements={state.elements[page.id] || []}
                 uploadedPhotos={state.uploadedPhotos}
+                isDragging={state.isDraggingZone}
               />
 
               {/* Delete button (only show if more than 1 page) */}

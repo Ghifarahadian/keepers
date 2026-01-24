@@ -21,7 +21,10 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
     data: { type: "zone", zone }
   })
 
-  const { state, selectElement, deleteElementFromCanvas, updateZoneLocal, updateZonePosition } = useEditor()
+  const { state, selectElement, deleteElementFromCanvas, updateZonePosition, setDraggingZone } = useEditor()
+
+  // Ref for direct DOM manipulation during drag (bypasses React)
+  const zoneRef = useRef<HTMLDivElement>(null)
 
   // Derive values from props
   const zoneElements = elements.filter(el => el.zone_index === zone.zone_index)
@@ -51,7 +54,7 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
   }
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!isOccupied) return
+    if (!isOccupied || !zoneRef.current) return
 
     e.stopPropagation()
     e.preventDefault()
@@ -60,6 +63,7 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
     if (!canvas) return
 
     isDragging.current = true
+    setDraggingZone(true)
     dragStart.current = { x: e.clientX, y: e.clientY }
     startPosition.current = {
       x: zone.position_x,
@@ -67,11 +71,15 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
       width: zone.width,
       height: zone.height
     }
+    currentPosition.current = { ...startPosition.current }
 
     if (firstElement) selectElement(firstElement.id)
 
+    // Disable CSS transitions during drag for smooth movement
+    zoneRef.current.style.transition = 'none'
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isDragging.current) return
+      if (!isDragging.current || !zoneRef.current) return
 
       const canvasRect = canvas.getBoundingClientRect()
       const deltaX = ((moveEvent.clientX - dragStart.current.x) / canvasRect.width) * 100
@@ -81,13 +89,24 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
       const newY = Math.max(0, Math.min(100 - zone.height, startPosition.current.y + deltaY))
 
       currentPosition.current = { ...currentPosition.current, x: newX, y: newY }
-      updateZoneLocal(zone.id, { position_x: newX, position_y: newY })
+
+      // Direct DOM manipulation - no React re-render
+      zoneRef.current.style.left = `${newX}%`
+      zoneRef.current.style.top = `${newY}%`
     }
 
     const handleMouseUp = () => {
       isDragging.current = false
+      setDraggingZone(false)
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
+
+      // Re-enable transitions
+      if (zoneRef.current) {
+        zoneRef.current.style.transition = ''
+      }
+
+      // Commit final position to state (triggers one React render)
       updateZonePosition(zone.id, {
         position_x: currentPosition.current.x,
         position_y: currentPosition.current.y,
@@ -96,10 +115,10 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
 
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
-  }, [zone, firstElement, selectElement, isOccupied, updateZoneLocal, updateZonePosition])
+  }, [zone, firstElement, selectElement, isOccupied, updateZonePosition, setDraggingZone])
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent, handle: ResizeHandle) => {
-    if (!isOccupied) return
+    if (!isOccupied || !zoneRef.current) return
 
     e.stopPropagation()
     e.preventDefault()
@@ -108,6 +127,7 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
     if (!canvas) return
 
     isResizing.current = handle
+    setDraggingZone(true)
     dragStart.current = { x: e.clientX, y: e.clientY }
     startPosition.current = {
       x: zone.position_x,
@@ -115,9 +135,13 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
       width: zone.width,
       height: zone.height
     }
+    currentPosition.current = { ...startPosition.current }
+
+    // Disable CSS transitions during resize
+    zoneRef.current.style.transition = 'none'
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizing.current) return
+      if (!isResizing.current || !zoneRef.current) return
 
       const canvasRect = canvas.getBoundingClientRect()
       const deltaX = ((moveEvent.clientX - dragStart.current.x) / canvasRect.width) * 100
@@ -167,13 +191,26 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
       height = Math.min(100 - y, height)
 
       currentPosition.current = { x, y, width, height }
-      updateZoneLocal(zone.id, { position_x: x, position_y: y, width, height })
+
+      // Direct DOM manipulation - no React re-render
+      zoneRef.current.style.left = `${x}%`
+      zoneRef.current.style.top = `${y}%`
+      zoneRef.current.style.width = `${width}%`
+      zoneRef.current.style.height = `${height}%`
     }
 
     const handleMouseUp = () => {
       isResizing.current = null
+      setDraggingZone(false)
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
+
+      // Re-enable transitions
+      if (zoneRef.current) {
+        zoneRef.current.style.transition = ''
+      }
+
+      // Commit final position to state (triggers one React render)
       updateZonePosition(zone.id, {
         position_x: currentPosition.current.x,
         position_y: currentPosition.current.y,
@@ -184,7 +221,13 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
 
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
-  }, [zone, isOccupied, updateZoneLocal, updateZonePosition])
+  }, [zone, isOccupied, updateZonePosition, setDraggingZone])
+
+  // Combine refs for droppable and DOM manipulation
+  const combinedRef = useCallback((node: HTMLDivElement | null) => {
+    zoneRef.current = node
+    setNodeRef(node)
+  }, [setNodeRef])
 
   const borderColor = isBlankLayout ? 'transparent'
     : isSelected ? 'rgba(212, 120, 108, 1)'
@@ -199,10 +242,10 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
 
   return (
     <div
-      ref={setNodeRef}
+      ref={combinedRef}
       onMouseDown={handleMouseDown}
       onClick={handleClick}
-      className={`absolute transition-all overflow-hidden ${!isBlankLayout ? 'border-2 border-dashed' : ''} ${isOccupied ? 'cursor-move group' : ''} ${isSelected ? 'z-20' : 'z-10'}`}
+      className={`absolute overflow-hidden ${!isBlankLayout ? 'border-2 border-dashed' : ''} ${isOccupied ? 'cursor-move group' : ''} ${isSelected ? 'z-20' : 'z-10'}`}
       style={{
         left: `${zone.position_x}%`,
         top: `${zone.position_y}%`,
@@ -258,6 +301,18 @@ export function ZoneContainer({ zone, elements, isBlankLayout = false }: ZoneCon
             )
           })}
         </>
+      )}
+
+      {/* Empty zone placeholder */}
+      {!isOccupied && !isBlankLayout && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <p
+            className="text-sm font-medium text-center px-2"
+            style={{ color: 'var(--color-secondary)', fontFamily: 'var(--font-serif)' }}
+          >
+            Drag photos here
+          </p>
+        </div>
       )}
 
       {/* Photos */}

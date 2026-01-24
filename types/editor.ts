@@ -167,9 +167,11 @@ export interface EditorState {
   zones: Record<string, PageZone[]> // Keyed by pageId - dynamic zones
   uploadedPhotos: UploadedPhoto[]
   selectedElementId: string | null
+  selectedZoneId: string | null // For selecting empty zones
   isSaving: boolean
   lastSaved: string | null
   error: string | null
+  isDraggingZone: boolean // True while dragging/resizing a zone
 }
 
 export type EditorAction =
@@ -188,11 +190,13 @@ export type EditorAction =
   | { type: 'SET_ZONES'; payload: { pageId: string; zones: PageZone[] } }
   | { type: 'UPDATE_ZONE'; payload: { zoneId: string; updates: Partial<PageZone> } }
   | { type: 'SELECT_ELEMENT'; payload: string | null }
+  | { type: 'SELECT_ZONE'; payload: string | null }
   | { type: 'ADD_UPLOADED_PHOTO'; payload: UploadedPhoto }
   | { type: 'REMOVE_UPLOADED_PHOTO'; payload: string }
   | { type: 'SET_SAVING'; payload: boolean }
   | { type: 'SET_LAST_SAVED'; payload: string }
   | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SET_DRAGGING_ZONE'; payload: boolean }
 
 // ============================================
 // FORM TYPES
