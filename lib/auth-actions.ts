@@ -16,7 +16,7 @@ export async function signUp(formData: {
     email: formData.email,
     password: formData.password,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/confirm`,
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?type=signup`,
       data: {
         first_name: formData.firstName,
         last_name: formData.lastName,
