@@ -34,7 +34,7 @@ export function UserMenu({ firstName }: UserMenuProps) {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 hover:opacity-70 transition-opacity text-[var(--color-primary-text)]"
+        className="flex items-center gap-2 px-5 py-2 hover:opacity-70 transition-opacity text-[var(--color-primary-text)]"
       >
         <span className="font-medium">{firstName}</span>
         <ChevronDown

@@ -332,15 +332,20 @@ See [sql/schema-supabase.sql](sql/schema-supabase.sql) for complete schema.
    NEXT_PUBLIC_SITE_URL=http://localhost:3000
    ```
 
-4. **Optional: Enable Google OAuth:**
-   - Supabase Dashboard → Authentication → Providers
-   - Enable Google provider
-   - Add your Google OAuth credentials
+4. **Enable Google OAuth:**
+   - Follow the complete guide: [docs/google-oauth-setup.md](docs/google-oauth-setup.md)
+   - Quick steps:
+     1. Create Google Cloud project
+     2. Get OAuth Client ID and Secret
+     3. Configure in Supabase Dashboard → Authentication → Providers
+     4. Add authorized redirect URIs
+   - **Note**: The "Continue with Google" button is already implemented in the UI
 
 5. **Optional: Disable Email Confirmation (Development):**
    - Supabase Dashboard → Authentication → Settings
    - Toggle OFF "Enable email confirmations"
    - Allows instant login without email verification
+   - **Not recommended for production**
 
 ### Security Features
 
