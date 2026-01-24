@@ -1,11 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { Camera, LayoutGrid, Type, Sparkles, Palette } from "lucide-react"
+import { Camera, LayoutGrid, Layers, Sparkles, Palette } from "lucide-react"
 import { PhotosPanel } from "./panels/photos-panel"
 import { LayoutsPanel } from "./panels/layouts-panel"
+import { ElementsPanel } from "./panels/elements-panel"
 
-type PanelType = "photos" | "layout" | "text" | "ai" | "color" | null
+type PanelType = "photos" | "layout" | "elements" | "ai" | "color" | null
 
 export function EditorToolbar() {
   const [activePanel, setActivePanel] = useState<PanelType>("photos")
@@ -13,7 +14,7 @@ export function EditorToolbar() {
   const tools = [
     { id: "photos" as const, icon: Camera, label: "Photos", enabled: true },
     { id: "layout" as const, icon: LayoutGrid, label: "Layout", enabled: true },
-    { id: "text" as const, icon: Type, label: "Text", enabled: false },
+    { id: "elements" as const, icon: Layers, label: "Elements", enabled: true },
     { id: "ai" as const, icon: Sparkles, label: "AI", enabled: false },
     { id: "color" as const, icon: Palette, label: "Color", enabled: false },
   ]
@@ -55,12 +56,7 @@ export function EditorToolbar() {
       <div className="flex-1 overflow-y-auto">
         {activePanel === "photos" && <PhotosPanel />}
         {activePanel === "layout" && <LayoutsPanel />}
-        {activePanel === "text" && (
-          <div className="p-8 text-center" style={{ color: 'var(--color-secondary)', fontFamily: 'var(--font-serif)' }}>
-            <Type className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p className="font-medium">Text tool coming soon</p>
-          </div>
-        )}
+        {activePanel === "elements" && <ElementsPanel />}
         {activePanel === "ai" && (
           <div className="p-8 text-center" style={{ color: 'var(--color-secondary)', fontFamily: 'var(--font-serif)' }}>
             <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-50" />

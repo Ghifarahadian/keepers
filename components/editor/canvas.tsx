@@ -1,7 +1,8 @@
 "use client"
 
 import { useEditor } from "@/lib/contexts/editor-context"
-import { ZoneContainer } from "./elements/zone-container"
+import { PictureContainer } from "./elements/picture-container"
+import { TextContainer } from "./elements/text-container"
 import { useDroppable } from "@dnd-kit/core"
 
 export function EditorCanvas() {
@@ -10,8 +11,6 @@ export function EditorCanvas() {
 
   const currentPage = state.pages.find((p) => p.id === state.currentPageId)
   const currentElements = state.elements[state.currentPageId] || []
-  const zones = state.zones[state.currentPageId] || []
-  const isBlankLayout = currentPage?.layout_id === 'blank'
 
   if (!currentPage) {
     return (
@@ -36,14 +35,15 @@ export function EditorCanvas() {
           backgroundColor: 'var(--color-white)'
         }}
       >
-        {zones.map((zone) => (
-          <ZoneContainer
-            key={zone.id}
-            zone={zone}
-            elements={currentElements}
-            isBlankLayout={isBlankLayout && zone.zone_index === 0}
-          />
-        ))}
+        {/* Render all elements with their respective containers */}
+        {currentElements.map((element) => {
+          if (element.type === 'photo') {
+            return <PictureContainer key={element.id} element={element} />
+          } else if (element.type === 'text') {
+            return <TextContainer key={element.id} element={element} />
+          }
+          return null
+        })}
       </div>
     </div>
   )

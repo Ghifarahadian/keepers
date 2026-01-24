@@ -189,6 +189,7 @@ export type EditorAction =
   | { type: 'DELETE_ELEMENT'; payload: { elementId: string } }
   | { type: 'SET_ZONES'; payload: { pageId: string; zones: PageZone[] } }
   | { type: 'UPDATE_ZONE'; payload: { zoneId: string; updates: Partial<PageZone> } }
+  | { type: 'DELETE_ZONE'; payload: { zoneId: string } }
   | { type: 'SELECT_ELEMENT'; payload: string | null }
   | { type: 'SELECT_ZONE'; payload: string | null }
   | { type: 'ADD_UPLOADED_PHOTO'; payload: UploadedPhoto }

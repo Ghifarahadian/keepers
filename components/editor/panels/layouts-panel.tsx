@@ -2,11 +2,11 @@
 
 import { useEditor } from "@/lib/contexts/editor-context"
 import { LAYOUTS } from "@/types/editor"
-import { updatePage, getPageZones } from "@/lib/editor-actions"
+import { updatePage, createElement, deleteElement } from "@/lib/editor-actions"
 import { Check } from "lucide-react"
 
 export function LayoutsPanel() {
-  const { state, dispatch } = useEditor()
+  const { state, dispatch, addElementToCanvas } = useEditor()
 
   const currentPage = state.pages.find((p) => p.id === state.currentPageId)
   const currentLayoutId = currentPage?.layout_id || "blank"
@@ -15,20 +15,39 @@ export function LayoutsPanel() {
     if (!currentPage) return
 
     try {
-      // Update layout (this also reinitializes zones in database)
+      // Get the layout template
+      const layout = LAYOUTS.find(l => l.id === layoutId)
+      if (!layout) return
+
+      // Update the page's layout_id
       await updatePage(currentPage.id, { layout_id: layoutId })
 
-      // Fetch the new zones from database
-      const newZones = await getPageZones(currentPage.id)
+      // Delete all existing elements on this page
+      const existingElements = state.elements[currentPage.id] || []
+      for (const element of existingElements) {
+        await deleteElement(element.id)
+        dispatch({ type: "DELETE_ELEMENT", payload: { elementId: element.id } })
+      }
 
-      // Update both layout and zones in state
+      // Create PictureContainers based on layout zones
+      for (let i = 0; i < layout.zones.length; i++) {
+        const zone = layout.zones[i]
+        await addElementToCanvas(currentPage.id, {
+          type: "photo",
+          page_id: currentPage.id,
+          position_x: zone.position_x,
+          position_y: zone.position_y,
+          width: zone.width,
+          height: zone.height,
+          rotation: 0,
+          z_index: i,
+        })
+      }
+
+      // Update layout in state
       dispatch({
         type: "UPDATE_PAGE_LAYOUT",
         payload: { pageId: currentPage.id, layoutId },
-      })
-      dispatch({
-        type: "SET_ZONES",
-        payload: { pageId: currentPage.id, zones: newZones },
       })
     } catch (error) {
       console.error("Failed to update layout:", error)
@@ -93,7 +112,7 @@ export function LayoutsPanel() {
 
       <div className="mt-6 p-3 border rounded-lg" style={{ backgroundColor: 'var(--color-white)', borderColor: 'var(--color-accent)' }}>
         <p className="text-xs" style={{ color: 'var(--color-neutral)', fontFamily: 'var(--font-serif)' }}>
-          <strong>Tip:</strong> Choose a layout, then drag photos from the Photos panel to fill the zones.
+          <strong>Tip:</strong> Choose a layout to create picture containers, then drag photos to fill them.
         </p>
       </div>
     </div>

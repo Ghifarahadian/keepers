@@ -69,8 +69,7 @@ keepers/
 │       ├── toolbar.tsx         # Right toolbar panel
 │       ├── bottom-bar.tsx      # Page navigation bar
 │       ├── elements/           # Canvas element components
-│       │   ├── photo-element.tsx   # Draggable/resizable photo on canvas
-│       │   └── zone-container.tsx  # Resizable layout zone container
+│       │   └── zone-container.tsx  # Resizable layout zone container with photo rendering
 │       ├── modals/             # Modal components
 │       │   └── project-selector.tsx # Project selection modal
 │       ├── ui/                 # Reusable UI components
@@ -610,7 +609,6 @@ KEEPERS includes a full-featured photobook editor that allows authenticated user
 │  │ Sidebar │         Canvas             │     Toolbar      │   │
 │  │ (Photos)│   (Page with Zones)        │   (Properties)   │   │
 │  │ (Layout)│   └── ZoneContainers       │                  │   │
-│  │         │       └── PhotoElements    │                  │   │
 │  └─────────┴────────────────────────────┴──────────────────┘   │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  Bottom Bar (Page Navigation)                             │  │
@@ -672,15 +670,17 @@ The editor uses a flexible zone-based layout system where:
 
 1. **Layout Templates** define initial zone positions (Blank, Single, Double, Triple, Grid 4, Grid 6)
 2. **Page Zones** are created from templates when a page is added
-3. **Zones are customizable** - users can resize and reposition zones
+3. **Zones are customizable** - users can resize and reposition both empty and occupied zones
 4. **Photos drop into zones** - each zone can hold one photo element
 5. **Zone changes persist** to database for reload
+6. **Photos render inline** - ZoneContainer handles both zone layout and photo display
 
 **Key Benefits:**
 - Users can customize layouts beyond fixed templates
 - Zone positions saved per-page in database
 - Zones auto-initialize from layout template
-- Supports drag-to-move and resize handles
+- Supports drag-to-move and resize handles for all zones (empty or occupied)
+- Empty zones can be selected and manipulated before adding photos
 
 ### Pre-defined Layouts
 
@@ -767,9 +767,11 @@ interface EditorState {
   elements: Record<string, Element[]>    // Keyed by pageId
   uploadedPhotos: UploadedPhoto[]
   selectedElementId: string | null
+  selectedZoneId: string | null          // For selecting empty zones
   isSaving: boolean
   lastSaved: string | null
   error: string | null
+  isDraggingZone: boolean                // True while dragging/resizing a zone
 }
 ```
 
@@ -777,14 +779,15 @@ interface EditorState {
 - `SET_PROJECT`, `SET_PAGES`, `SET_CURRENT_PAGE`
 - `UPDATE_PROJECT_TITLE`, `ADD_PAGE`, `DELETE_PAGE`, `REORDER_PAGES`
 - `UPDATE_PAGE_LAYOUT`, `SET_ELEMENTS`, `ADD_ELEMENT`
-- `UPDATE_ELEMENT`, `DELETE_ELEMENT`, `SELECT_ELEMENT`
-- `SET_ZONES`, `UPDATE_ZONE`
+- `UPDATE_ELEMENT`, `DELETE_ELEMENT`, `SELECT_ELEMENT`, `SELECT_ZONE`
+- `SET_ZONES`, `UPDATE_ZONE`, `SET_DRAGGING_ZONE`
 - `ADD_UPLOADED_PHOTO`, `REMOVE_UPLOADED_PHOTO`
 - `SET_SAVING`, `SET_LAST_SAVED`, `SET_ERROR`
 
 **Context Methods:**
-- `updateZoneLocal(zoneId, updates)` - Local state update for live dragging
+- `selectZone(zoneId)` - Select an empty zone for resizing/repositioning
 - `updateZonePosition(zoneId, updates)` - Persist zone changes to server
+- `setDraggingZone(isDragging)` - Track zone drag state
 
 ### Editor Components
 
@@ -796,8 +799,7 @@ interface EditorState {
 | EditorCanvas | [components/editor/canvas.tsx](components/editor/canvas.tsx) | Main editing canvas with zone rendering |
 | EditorToolbar | [components/editor/toolbar.tsx](components/editor/toolbar.tsx) | Right panel for element properties |
 | EditorBottomBar | [components/editor/bottom-bar.tsx](components/editor/bottom-bar.tsx) | Page thumbnails navigation |
-| PhotoElement | [components/editor/elements/photo-element.tsx](components/editor/elements/photo-element.tsx) | Draggable/resizable photo on canvas |
-| ZoneContainer | [components/editor/elements/zone-container.tsx](components/editor/elements/zone-container.tsx) | Resizable layout zone with drop target |
+| ZoneContainer | [components/editor/elements/zone-container.tsx](components/editor/elements/zone-container.tsx) | Resizable layout zone with photo rendering and drop target |
 | PhotosPanel | [components/editor/panels/photos-panel.tsx](components/editor/panels/photos-panel.tsx) | Photo upload and library |
 | LayoutsPanel | [components/editor/panels/layouts-panel.tsx](components/editor/panels/layouts-panel.tsx) | Layout template selection |
 | ProjectSelectorModal | [components/editor/modals/project-selector.tsx](components/editor/modals/project-selector.tsx) | Create/open project modal |
@@ -811,8 +813,7 @@ EditorLayout (DnD Context)
 ├── EditorSidebar
 │   └── PhotosPanel / LayoutsPanel (tabbed)
 ├── EditorCanvas
-│   └── ZoneContainer (multiple, one per zone)
-│       └── PhotoElement (if zone occupied)
+│   └── ZoneContainer (multiple, one per zone, renders photo inline if occupied)
 ├── EditorToolbar
 └── EditorBottomBar (Page thumbnails)
 ```
@@ -851,5 +852,5 @@ npx tsx scripts/test-db-setup.ts
 
 ---
 
-**Project Version**: 7.0.0 (With Zone-Based Layout System)
+**Project Version**: 7.1.0 (Simplified Zone Architecture)
 **Framework**: Next.js 16.0.10 + React 19.2.0 + Supabase 2.89.0

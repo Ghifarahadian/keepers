@@ -2,11 +2,10 @@
 
 import { useState, useRef, useEffect } from "react"
 import { useEditor } from "@/lib/contexts/editor-context"
-import { Upload, Loader2 } from "lucide-react"
+import { Upload, Loader2, Trash2 } from "lucide-react"
 import { uploadPhoto, deletePhoto } from "@/lib/photo-upload-actions"
 import { useDraggable } from "@dnd-kit/core"
 import type { UploadedPhoto } from "@/types/editor"
-import { DeleteButton } from "../ui/delete-button"
 
 function DraggablePhoto({ photo, onDelete }: { photo: UploadedPhoto; onDelete: (photo: UploadedPhoto) => void }) {
   const [imageError, setImageError] = useState(false)
@@ -62,11 +61,17 @@ function DraggablePhoto({ photo, onDelete }: { photo: UploadedPhoto; onDelete: (
         />
       )}
       {/* Delete button */}
-      <DeleteButton
+      <button
         onClick={handleDelete}
-        isDeleting={isDeleting}
-        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100"
-      />
+        disabled={isDeleting}
+        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 w-7 h-7 rounded-full flex items-center justify-center transition-all disabled:opacity-50 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)]"
+      >
+        {isDeleting ? (
+          <Loader2 className="w-4 h-4 text-white animate-spin" />
+        ) : (
+          <Trash2 className="w-4 h-4 text-white" />
+        )}
+      </button>
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center pointer-events-none">
         <span className="text-xs opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--color-white)', fontFamily: 'var(--font-serif)' }}>
           Drag to canvas

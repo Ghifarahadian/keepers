@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useReducer, useCallback } from "react"
 import type { Project, Page, Element, PageZone, EditorState, EditorAction, UploadedPhoto, UpdateElementInput, UpdateZoneInput } from "@/types/editor"
-import { updateProject, updateElement, createElement, deleteElement, updateZone } from "@/lib/editor-actions"
+import { updateProject, updateElement, createElement, deleteElement, updateZone, deleteZone } from "@/lib/editor-actions"
 
 // Initial state
 const createInitialState = (project: Project, uploadedPhotos?: UploadedPhoto[]): EditorState => ({
@@ -132,6 +132,18 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, zones: newZones }
     }
 
+    case "DELETE_ZONE": {
+      const newZones = { ...state.zones }
+      Object.keys(newZones).forEach((pageId) => {
+        newZones[pageId] = newZones[pageId].filter((zone) => zone.id !== action.payload.zoneId)
+      })
+      return {
+        ...state,
+        zones: newZones,
+        selectedZoneId: state.selectedZoneId === action.payload.zoneId ? null : state.selectedZoneId,
+      }
+    }
+
     case "SELECT_ELEMENT":
       return { ...state, selectedElementId: action.payload, selectedZoneId: null }
 
@@ -189,6 +201,7 @@ interface EditorContextValue {
   // Zone actions
   selectZone: (zoneId: string | null) => void
   updateZonePosition: (zoneId: string, updates: UpdateZoneInput) => Promise<void>
+  deleteZoneFromCanvas: (zoneId: string) => Promise<void>
   setDraggingZone: (isDragging: boolean) => void
 
   // Photo actions
@@ -318,6 +331,17 @@ export function EditorProvider({
     }
   }, [])
 
+  // Delete zone from canvas
+  const deleteZoneFromCanvas = useCallback(async (zoneId: string) => {
+    try {
+      await deleteZone(zoneId)
+      dispatch({ type: "DELETE_ZONE", payload: { zoneId } })
+    } catch (error) {
+      console.error("Delete zone error:", error)
+      dispatch({ type: "SET_ERROR", payload: "Failed to delete zone" })
+    }
+  }, [])
+
   // Set dragging zone state (for thumbnail optimization)
   const setDraggingZone = useCallback((isDragging: boolean) => {
     dispatch({ type: "SET_DRAGGING_ZONE", payload: isDragging })
@@ -346,6 +370,7 @@ export function EditorProvider({
     selectElement,
     selectZone,
     updateZonePosition,
+    deleteZoneFromCanvas,
     setDraggingZone,
     addUploadedPhoto,
     removeUploadedPhoto,
