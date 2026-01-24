@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { getUserProfile } from "@/lib/auth-actions"
 import { getUserProjects } from "@/lib/editor-actions"
-import { ProjectSelectorModal } from "@/components/editor/project-selector-modal"
+import { ProjectSelectorModal } from "@/components/editor/modals/project-selector"
 
 export default async function NewEditorPage() {
   // Check authentication

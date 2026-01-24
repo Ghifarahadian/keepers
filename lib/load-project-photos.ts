@@ -21,11 +21,10 @@ export async function loadProjectPhotos(project: Project): Promise<UploadedPhoto
   })
 
   const photoPaths = Array.from(photoPathsSet)
-  console.log('[loadProjectPhotos] Found photo paths:', photoPaths)
 
   // Generate signed URLs for all photos
-  const photos: UploadedPhoto[] = await Promise.all(
-    photoPaths.map(async (path) => {
+  const photos = await Promise.all(
+    photoPaths.map(async (path): Promise<UploadedPhoto | null> => {
       const { data: signedData, error } = await supabase.storage
         .from("project-photos")
         .createSignedUrl(path, 60 * 60 * 24 * 365) // 1 year
@@ -49,7 +48,5 @@ export async function loadProjectPhotos(project: Project): Promise<UploadedPhoto
   )
 
   // Filter out any failed URLs
-  const validPhotos = photos.filter((photo): photo is UploadedPhoto => photo !== null)
-  console.log('[loadProjectPhotos] Generated', validPhotos.length, 'signed URLs')
-  return validPhotos
+  return photos.filter((photo): photo is UploadedPhoto => photo !== null)
 }

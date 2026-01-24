@@ -1,8 +1,8 @@
 "use client"
 
 import React, { createContext, useContext, useReducer, useCallback } from "react"
-import type { Project, Page, Element, EditorState, EditorAction, UploadedPhoto } from "@/types/editor"
-import { updateProject, updateElement, createElement, deleteElement } from "@/lib/editor-actions"
+import type { Project, Page, Element, PageZone, EditorState, EditorAction, UploadedPhoto, UpdateElementInput, UpdateZoneInput } from "@/types/editor"
+import { updateProject, updateElement, createElement, deleteElement, updateZone } from "@/lib/editor-actions"
 
 // Initial state
 const createInitialState = (project: Project, uploadedPhotos?: UploadedPhoto[]): EditorState => ({
@@ -13,6 +13,10 @@ const createInitialState = (project: Project, uploadedPhotos?: UploadedPhoto[]):
     acc[page.id] = page.elements || []
     return acc
   }, {} as Record<string, Element[]>) || {},
+  zones: project.pages?.reduce((acc, page) => {
+    acc[page.id] = page.zones || []
+    return acc
+  }, {} as Record<string, PageZone[]>) || {},
   uploadedPhotos: uploadedPhotos || [],
   selectedElementId: null,
   isSaving: false,
@@ -43,16 +47,20 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         pages: [...state.pages, action.payload],
         elements: { ...state.elements, [action.payload.id]: [] },
+        zones: { ...state.zones, [action.payload.id]: action.payload.zones || [] },
       }
 
     case "DELETE_PAGE": {
       const newPages = state.pages.filter((p) => p.id !== action.payload)
       const newElements = { ...state.elements }
+      const newZones = { ...state.zones }
       delete newElements[action.payload]
+      delete newZones[action.payload]
       return {
         ...state,
         pages: newPages,
         elements: newElements,
+        zones: newZones,
         currentPageId: state.currentPageId === action.payload ? newPages[0]?.id || "" : state.currentPageId,
       }
     }
@@ -106,6 +114,22 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
       }
     }
 
+    case "SET_ZONES":
+      return {
+        ...state,
+        zones: { ...state.zones, [action.payload.pageId]: action.payload.zones },
+      }
+
+    case "UPDATE_ZONE": {
+      const newZones = { ...state.zones }
+      Object.keys(newZones).forEach((pageId) => {
+        newZones[pageId] = newZones[pageId].map((zone) =>
+          zone.id === action.payload.zoneId ? { ...zone, ...action.payload.updates } : zone
+        )
+      })
+      return { ...state, zones: newZones }
+    }
+
     case "SELECT_ELEMENT":
       return { ...state, selectedElementId: action.payload }
 
@@ -149,10 +173,14 @@ interface EditorContextValue {
 
   // Element actions
   addElementToCanvas: (pageId: string, element: Omit<Element, "id" | "created_at" | "updated_at">) => Promise<void>
-  updateElementLocal: (elementId: string, updates: Partial<Element>) => void
-  updateElementPosition: (elementId: string, updates: Partial<Element>) => Promise<void>
+  updateElementLocal: (elementId: string, updates: UpdateElementInput) => void
+  updateElementPosition: (elementId: string, updates: UpdateElementInput) => Promise<void>
   deleteElementFromCanvas: (elementId: string) => Promise<void>
   selectElement: (elementId: string | null) => void
+
+  // Zone actions
+  updateZoneLocal: (zoneId: string, updates: UpdateZoneInput) => void
+  updateZonePosition: (zoneId: string, updates: UpdateZoneInput) => Promise<void>
 
   // Photo actions
   addUploadedPhoto: (photo: UploadedPhoto) => void
@@ -221,6 +249,7 @@ export function EditorProvider({
           height: element.height,
           rotation: element.rotation || 0,
           z_index: element.z_index || 0,
+          zone_index: element.zone_index,
         })
 
         dispatch({ type: "ADD_ELEMENT", payload: { pageId, element: newElement } })
@@ -233,15 +262,13 @@ export function EditorProvider({
   )
 
   // Update element locally only (no server call) - for dragging/resizing
-  const updateElementLocal = useCallback((elementId: string, updates: Partial<Element>) => {
+  const updateElementLocal = useCallback((elementId: string, updates: UpdateElementInput) => {
     dispatch({ type: "UPDATE_ELEMENT", payload: { elementId, updates } })
   }, [])
 
   // Update element position and save to server
-  const updateElementPosition = useCallback(async (elementId: string, updates: Partial<Element>) => {
-    // Optimistic update
+  const updateElementPosition = useCallback(async (elementId: string, updates: UpdateElementInput) => {
     dispatch({ type: "UPDATE_ELEMENT", payload: { elementId, updates } })
-
     try {
       await updateElement(elementId, updates)
     } catch (error) {
@@ -266,6 +293,22 @@ export function EditorProvider({
     dispatch({ type: "SELECT_ELEMENT", payload: elementId })
   }, [])
 
+  // Update zone locally only (no server call) - for dragging/resizing
+  const updateZoneLocal = useCallback((zoneId: string, updates: UpdateZoneInput) => {
+    dispatch({ type: "UPDATE_ZONE", payload: { zoneId, updates } })
+  }, [])
+
+  // Update zone position and save to server
+  const updateZonePosition = useCallback(async (zoneId: string, updates: UpdateZoneInput) => {
+    dispatch({ type: "UPDATE_ZONE", payload: { zoneId, updates } })
+    try {
+      await updateZone(zoneId, updates)
+    } catch (error) {
+      console.error("Update zone error:", error)
+      dispatch({ type: "SET_ERROR", payload: "Failed to update zone" })
+    }
+  }, [])
+
   // Add uploaded photo
   const addUploadedPhoto = useCallback((photo: UploadedPhoto) => {
     dispatch({ type: "ADD_UPLOADED_PHOTO", payload: photo })
@@ -287,6 +330,8 @@ export function EditorProvider({
     updateElementPosition,
     deleteElementFromCanvas,
     selectElement,
+    updateZoneLocal,
+    updateZonePosition,
     addUploadedPhoto,
     removeUploadedPhoto,
   }

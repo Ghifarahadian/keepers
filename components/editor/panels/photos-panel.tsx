@@ -6,7 +6,7 @@ import { Upload, Loader2 } from "lucide-react"
 import { uploadPhoto, deletePhoto } from "@/lib/photo-upload-actions"
 import { useDraggable } from "@dnd-kit/core"
 import type { UploadedPhoto } from "@/types/editor"
-import { DeleteButton } from "../delete-button"
+import { DeleteButton } from "../ui/delete-button"
 
 function DraggablePhoto({ photo, onDelete }: { photo: UploadedPhoto; onDelete: (photo: UploadedPhoto) => void }) {
   const [imageError, setImageError] = useState(false)

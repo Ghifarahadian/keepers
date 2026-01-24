@@ -2,7 +2,7 @@
 
 import { useEditor } from "@/lib/contexts/editor-context"
 import { LAYOUTS } from "@/types/editor"
-import { updatePage } from "@/lib/editor-actions"
+import { updatePage, getPageZones } from "@/lib/editor-actions"
 import { Check } from "lucide-react"
 
 export function LayoutsPanel() {
@@ -15,10 +15,20 @@ export function LayoutsPanel() {
     if (!currentPage) return
 
     try {
+      // Update layout (this also reinitializes zones in database)
       await updatePage(currentPage.id, { layout_id: layoutId })
+
+      // Fetch the new zones from database
+      const newZones = await getPageZones(currentPage.id)
+
+      // Update both layout and zones in state
       dispatch({
         type: "UPDATE_PAGE_LAYOUT",
         payload: { pageId: currentPage.id, layoutId },
+      })
+      dispatch({
+        type: "SET_ZONES",
+        payload: { pageId: currentPage.id, zones: newZones },
       })
     } catch (error) {
       console.error("Failed to update layout:", error)

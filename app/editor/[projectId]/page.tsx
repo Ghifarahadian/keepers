@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { getUserProfile } from "@/lib/auth-actions"
 import { getProject } from "@/lib/editor-actions"
 import { loadProjectPhotos } from "@/lib/load-project-photos"
-import { EditorLayout } from "@/components/editor/editor-layout"
+import { EditorLayout } from "@/components/editor/layout"
 
 interface EditorPageProps {
   params: Promise<{

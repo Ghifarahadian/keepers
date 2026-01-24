@@ -62,21 +62,25 @@ keepers/
 │   ├── hero.tsx                # Hero section (Client)
 │   ├── user-menu.tsx           # User dropdown menu (Client)
 │   └── editor/                 # Photobook editor components
-│       ├── editor-layout.tsx   # Main editor layout with DnD context
-│       ├── editor-top-bar.tsx  # Top navigation bar
-│       ├── editor-sidebar.tsx  # Left sidebar (tabs: Photos, Layouts)
-│       ├── editor-canvas.tsx   # Main canvas area
-│       ├── editor-toolbar.tsx  # Right toolbar panel
-│       ├── editor-bottom-bar.tsx # Page navigation bar
-│       ├── photo-element.tsx   # Draggable/resizable photo on canvas
-│       ├── delete-button.tsx   # Reusable delete button component
-│       ├── project-selector-modal.tsx # Project selection modal
+│       ├── layout.tsx          # Main editor layout with DnD context
+│       ├── top-bar.tsx         # Top navigation bar
+│       ├── sidebar.tsx         # Left sidebar (tabs: Photos, Layouts)
+│       ├── canvas.tsx          # Main canvas area with zone rendering
+│       ├── toolbar.tsx         # Right toolbar panel
+│       ├── bottom-bar.tsx      # Page navigation bar
+│       ├── elements/           # Canvas element components
+│       │   ├── photo-element.tsx   # Draggable/resizable photo on canvas
+│       │   └── zone-container.tsx  # Resizable layout zone container
+│       ├── modals/             # Modal components
+│       │   └── project-selector.tsx # Project selection modal
+│       ├── ui/                 # Reusable UI components
+│       │   └── delete-button.tsx   # Reusable delete button
 │       └── panels/
 │           ├── photos-panel.tsx  # Photo upload and library panel
 │           └── layouts-panel.tsx # Layout selection panel
 ├── lib/
 │   ├── auth-actions.ts         # Server actions for authentication
-│   ├── editor-actions.ts       # Server actions for projects/pages/elements
+│   ├── editor-actions.ts       # Server actions for projects/pages/elements/zones
 │   ├── photo-upload-actions.ts # Server actions for photo uploads
 │   ├── load-project-photos.ts  # Load and refresh signed URLs for photos
 │   ├── config.ts               # Feature flags & configuration
@@ -90,13 +94,10 @@ keepers/
 ├── types/
 │   ├── auth.ts                 # TypeScript auth type definitions
 │   ├── waitlist.ts             # Waitlist type definitions
-│   └── editor.ts               # Editor type definitions (Project, Page, Element, Layout)
+│   └── editor.ts               # Editor type definitions (Project, Page, PageZone, Element, Layout)
 ├── sql/
-│   ├── schema-supabase.sql     # Auth/profiles database schema
-│   ├── waitlist-schema.sql     # Waitlist table schema
-│   ├── editor-schema.sql       # Editor tables schema (projects, pages, elements)
-│   ├── create-storage-bucket.sql # Storage bucket creation SQL
-│   ├── storage-setup.md        # Storage setup guide
+│   ├── setup.sql               # Complete consolidated database schema
+│   ├── storage-setup.md        # Storage bucket setup guide
 │   └── README.md               # Database setup instructions
 ├── scripts/
 │   └── test-db-setup.ts        # Database setup verification script
@@ -140,7 +141,6 @@ keepers/
 - Full-featured authentication modal with:
   - Login and signup forms
   - Email/password authentication
-  - Google OAuth integration
   - Form validation
   - Error handling
   - **Email verification flow** - Shows "Check Your Email" message when confirmation required
@@ -224,7 +224,6 @@ pnpm start
 - Clean typography with serif fonts
 - **Full authentication system with Supabase Auth**
   - Email/password signup and login
-  - Google OAuth integration
   - Session management with automatic refresh
   - Row Level Security (RLS) for data protection
 - User profile management (first name, last name)
@@ -233,6 +232,7 @@ pnpm start
 - Server-side rendering with Next.js App Router
 - **Full-featured photobook editor**
   - Drag-and-drop photo placement
+  - Customizable layout zones (resizable and repositionable)
   - Multiple page layouts (Blank, Single, Double, Triple, Grid 4, Grid 6)
   - Photo upload with Supabase Storage
   - Project management (create, save, delete)
@@ -246,7 +246,6 @@ pnpm start
 
 KEEPERS uses **Supabase Auth** for user authentication and session management. The system supports:
 - Email/password authentication with **email verification**
-- Google OAuth (configurable)
 - Automatic session refresh via middleware
 - Secure row-level data access
 - Custom email templates with unified branding (teal theme)
@@ -288,7 +287,7 @@ KEEPERS uses **Supabase Auth** for user authentication and session management. T
   - Automatically created via trigger on user signup
   - Protected by Row Level Security (RLS)
 
-See [sql/schema-supabase.sql](sql/schema-supabase.sql) for complete schema.
+See [sql/setup.sql](sql/setup.sql) for complete schema.
 
 ### File Organization
 
@@ -321,8 +320,8 @@ See [sql/schema-supabase.sql](sql/schema-supabase.sql) for complete schema.
 
 2. **Run Database Schema:**
    - Open Supabase SQL Editor
-   - Copy contents of [sql/schema-supabase.sql](sql/schema-supabase.sql)
-   - Execute the SQL to create `profiles` table and triggers
+   - Copy contents of [sql/setup.sql](sql/setup.sql)
+   - Execute the SQL to create all tables, triggers, and RLS policies
 
 3. **Configure Environment Variables:**
    ```env
@@ -332,16 +331,7 @@ See [sql/schema-supabase.sql](sql/schema-supabase.sql) for complete schema.
    NEXT_PUBLIC_SITE_URL=http://localhost:3000
    ```
 
-4. **Enable Google OAuth:**
-   - Follow the complete guide: [docs/google-oauth-setup.md](docs/google-oauth-setup.md)
-   - Quick steps:
-     1. Create Google Cloud project
-     2. Get OAuth Client ID and Secret
-     3. Configure in Supabase Dashboard → Authentication → Providers
-     4. Add authorized redirect URIs
-   - **Note**: The "Continue with Google" button is already implemented in the UI
-
-5. **Optional: Disable Email Confirmation (Development):**
+4. **Optional: Disable Email Confirmation (Development):**
    - Supabase Dashboard → Authentication → Settings
    - Toggle OFF "Enable email confirmations"
    - Allows instant login without email verification
@@ -555,36 +545,21 @@ KEEPERS includes a fully functional waitlist system on a dedicated `/coming-soon
 
 ### Key Features
 
-- ✅ **Email Validation**: Client + server side
-- ✅ **Duplicate Prevention**: UNIQUE constraint + friendly error messages
-- ✅ **Success State**: Replaces form with thank you message
-- ✅ **Smooth Scrolling**: Hero → Waitlist sections
-- ✅ **Social Links**: Sticky footer with Instagram & TikTok
-- ✅ **Back to Top**: Arrow on success page
-- ✅ **Spam Prevention**: IP & user agent tracking
+- Email Validation: Client + server side
+- Duplicate Prevention: UNIQUE constraint + friendly error messages
+- Success State: Replaces form with thank you message
+- Smooth Scrolling: Hero -> Waitlist sections
+- Social Links: Sticky footer with Instagram & TikTok
+- Back to Top: Arrow on success page
+- Spam Prevention: IP & user agent tracking
 
 ### Database Setup
 
-Run [sql/waitlist-schema.sql](sql/waitlist-schema.sql) in Supabase SQL Editor:
-
-```sql
-CREATE TABLE public.waitlist (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email VARCHAR(255) UNIQUE NOT NULL,
-  ip_address INET,
-  user_agent TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLS is DISABLED for public signups
-ALTER TABLE public.waitlist DISABLE ROW LEVEL SECURITY;
-GRANT INSERT ON public.waitlist TO anon, authenticated;
-```
+Run [sql/setup.sql](sql/setup.sql) in Supabase SQL Editor (includes waitlist table).
 
 ### Middleware Redirect
 
-When `NEXT_PUBLIC_COMING_SOON_MODE=true`, [middleware.ts](middleware.ts) redirects `/` → `/coming-soon`:
+When `NEXT_PUBLIC_COMING_SOON_MODE=true`, [middleware.ts](middleware.ts) redirects `/` -> `/coming-soon`:
 
 ```typescript
 if (isComingSoonMode && request.nextUrl.pathname === '/') {
@@ -613,7 +588,7 @@ Links open in new tabs with `target="_blank"` and `rel="noopener noreferrer"`.
 
 ### Overview
 
-KEEPERS includes a full-featured photobook editor that allows authenticated users to create, edit, and manage custom photobooks. The editor features drag-and-drop photo placement, multiple layout options, and real-time saving.
+KEEPERS includes a full-featured photobook editor that allows authenticated users to create, edit, and manage custom photobooks. The editor features drag-and-drop photo placement, customizable layout zones, and real-time saving.
 
 ### Architecture
 
@@ -623,18 +598,19 @@ KEEPERS includes a full-featured photobook editor that allows authenticated user
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  EditorProvider (React Context)                           │  │
-│  │  - State: project, pages, elements, uploadedPhotos        │  │
-│  │  - Actions: addElement, updateElement, deleteElement      │  │
+│  │  - State: project, pages, zones, elements, uploadedPhotos │  │
+│  │  - Actions: addElement, updateElement, updateZone, etc.   │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  DndContext (@dnd-kit)                                    │  │
-│  │  - Drag photos from sidebar to canvas                     │  │
+│  │  - Drag photos from sidebar to zones                      │  │
 │  │  - Handles drag start/end events                          │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌─────────┬────────────────────────────┬──────────────────┐   │
 │  │ Sidebar │         Canvas             │     Toolbar      │   │
-│  │ (Photos)│   (Page with Elements)     │   (Properties)   │   │
-│  │ (Layout)│                            │                  │   │
+│  │ (Photos)│   (Page with Zones)        │   (Properties)   │   │
+│  │ (Layout)│   └── ZoneContainers       │                  │   │
+│  │         │       └── PhotoElements    │                  │   │
 │  └─────────┴────────────────────────────┴──────────────────┘   │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  Bottom Bar (Page Navigation)                             │  │
@@ -668,9 +644,19 @@ KEEPERS includes a full-featured photobook editor that allows authenticated user
 - `title` (VARCHAR) - Optional page title
 - `created_at`, `updated_at` (TIMESTAMPTZ)
 
+**Page Zones** (`public.page_zones`)
+- `id` (UUID) - Primary key
+- `page_id` (UUID) - Parent page
+- `zone_index` (INT) - Order/index of zone on page
+- `position_x`, `position_y` (FLOAT) - Position as percentage (0-100)
+- `width`, `height` (FLOAT) - Size as percentage (0-100)
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+- UNIQUE constraint on `(page_id, zone_index)`
+
 **Elements** (`public.elements`)
 - `id` (UUID) - Primary key
 - `page_id` (UUID) - Parent page
+- `zone_index` (INT) - Optional zone assignment
 - `type` (VARCHAR) - 'photo' or 'text'
 - `photo_url` (TEXT) - Signed URL for display
 - `photo_storage_path` (TEXT) - Storage path for regenerating URLs
@@ -679,6 +665,22 @@ KEEPERS includes a full-featured photobook editor that allows authenticated user
 - `rotation` (FLOAT) - Rotation in degrees
 - `z_index` (INT) - Layer order
 - `created_at`, `updated_at` (TIMESTAMPTZ)
+
+### Zone-Based Layout System
+
+The editor uses a flexible zone-based layout system where:
+
+1. **Layout Templates** define initial zone positions (Blank, Single, Double, Triple, Grid 4, Grid 6)
+2. **Page Zones** are created from templates when a page is added
+3. **Zones are customizable** - users can resize and reposition zones
+4. **Photos drop into zones** - each zone can hold one photo element
+5. **Zone changes persist** to database for reload
+
+**Key Benefits:**
+- Users can customize layouts beyond fixed templates
+- Zone positions saved per-page in database
+- Zones auto-initialize from layout template
+- Supports drag-to-move and resize handles
 
 ### Pre-defined Layouts
 
@@ -718,17 +720,23 @@ project-photos/
 ### Server Actions
 
 **Project Actions** ([lib/editor-actions.ts](lib/editor-actions.ts)):
-- `createProject(input?)` - Create new project with first page
-- `getProject(projectId)` - Fetch project with pages and elements
+- `createProject(input?)` - Create new project with first page and zones
+- `getProject(projectId)` - Fetch project with pages, zones, and elements
 - `updateProject(projectId, updates)` - Update project metadata
 - `deleteProject(projectId)` - Delete project and all related data
 - `getUserProjects()` - List all projects for current user
 
 **Page Actions**:
-- `createPage(input)` - Add page to project
-- `updatePage(pageId, updates)` - Update page (layout, title)
+- `createPage(input)` - Add page to project (initializes zones from layout)
+- `updatePage(pageId, updates)` - Update page (reinitializes zones if layout changes)
 - `deletePage(pageId, projectId)` - Remove page
 - `reorderPages(projectId, pageIds)` - Reorder pages
+
+**Zone Actions**:
+- `initializeZonesFromLayout(pageId, layoutId)` - Create zones from template
+- `createZone(input)` - Add single zone to page
+- `updateZone(zoneId, updates)` - Update zone position/size
+- `deleteZone(zoneId)` - Remove zone
 
 **Element Actions**:
 - `createElement(input)` - Add element to page
@@ -755,7 +763,8 @@ interface EditorState {
   project: Project
   pages: Page[]
   currentPageId: string
-  elements: Record<string, Element[]> // Keyed by pageId
+  zones: Record<string, PageZone[]>      // Keyed by pageId
+  elements: Record<string, Element[]>    // Keyed by pageId
   uploadedPhotos: UploadedPhoto[]
   selectedElementId: string | null
   isSaving: boolean
@@ -769,35 +778,60 @@ interface EditorState {
 - `UPDATE_PROJECT_TITLE`, `ADD_PAGE`, `DELETE_PAGE`, `REORDER_PAGES`
 - `UPDATE_PAGE_LAYOUT`, `SET_ELEMENTS`, `ADD_ELEMENT`
 - `UPDATE_ELEMENT`, `DELETE_ELEMENT`, `SELECT_ELEMENT`
+- `SET_ZONES`, `UPDATE_ZONE`
 - `ADD_UPLOADED_PHOTO`, `REMOVE_UPLOADED_PHOTO`
 - `SET_SAVING`, `SET_LAST_SAVED`, `SET_ERROR`
 
+**Context Methods:**
+- `updateZoneLocal(zoneId, updates)` - Local state update for live dragging
+- `updateZonePosition(zoneId, updates)` - Persist zone changes to server
+
 ### Editor Components
 
-| Component | Description |
-|-----------|-------------|
-| [EditorLayout](components/editor/editor-layout.tsx) | Main layout with DnD context |
-| [EditorTopBar](components/editor/editor-top-bar.tsx) | Project title, save status, navigation |
-| [EditorSidebar](components/editor/editor-sidebar.tsx) | Tabbed sidebar (Photos, Layouts) |
-| [EditorCanvas](components/editor/editor-canvas.tsx) | Main editing canvas with drop zone |
-| [EditorToolbar](components/editor/editor-toolbar.tsx) | Right panel for element properties |
-| [EditorBottomBar](components/editor/editor-bottom-bar.tsx) | Page thumbnails navigation |
-| [PhotoElement](components/editor/photo-element.tsx) | Draggable/resizable photo on canvas |
-| [PhotosPanel](components/editor/panels/photos-panel.tsx) | Photo upload and library |
-| [LayoutsPanel](components/editor/panels/layouts-panel.tsx) | Layout template selection |
-| [ProjectSelectorModal](components/editor/project-selector-modal.tsx) | Create/open project modal |
+| Component | File | Description |
+|-----------|------|-------------|
+| EditorLayout | [components/editor/layout.tsx](components/editor/layout.tsx) | Main layout with DnD context |
+| EditorTopBar | [components/editor/top-bar.tsx](components/editor/top-bar.tsx) | Project title, save status, navigation |
+| EditorSidebar | [components/editor/sidebar.tsx](components/editor/sidebar.tsx) | Tabbed sidebar (Photos, Layouts) |
+| EditorCanvas | [components/editor/canvas.tsx](components/editor/canvas.tsx) | Main editing canvas with zone rendering |
+| EditorToolbar | [components/editor/toolbar.tsx](components/editor/toolbar.tsx) | Right panel for element properties |
+| EditorBottomBar | [components/editor/bottom-bar.tsx](components/editor/bottom-bar.tsx) | Page thumbnails navigation |
+| PhotoElement | [components/editor/elements/photo-element.tsx](components/editor/elements/photo-element.tsx) | Draggable/resizable photo on canvas |
+| ZoneContainer | [components/editor/elements/zone-container.tsx](components/editor/elements/zone-container.tsx) | Resizable layout zone with drop target |
+| PhotosPanel | [components/editor/panels/photos-panel.tsx](components/editor/panels/photos-panel.tsx) | Photo upload and library |
+| LayoutsPanel | [components/editor/panels/layouts-panel.tsx](components/editor/panels/layouts-panel.tsx) | Layout template selection |
+| ProjectSelectorModal | [components/editor/modals/project-selector.tsx](components/editor/modals/project-selector.tsx) | Create/open project modal |
+| DeleteButton | [components/editor/ui/delete-button.tsx](components/editor/ui/delete-button.tsx) | Reusable delete button |
+
+### Component Hierarchy
+
+```
+EditorLayout (DnD Context)
+├── EditorTopBar
+├── EditorSidebar
+│   └── PhotosPanel / LayoutsPanel (tabbed)
+├── EditorCanvas
+│   └── ZoneContainer (multiple, one per zone)
+│       └── PhotoElement (if zone occupied)
+├── EditorToolbar
+└── EditorBottomBar (Page thumbnails)
+```
 
 ### Database Setup
 
-Run [sql/editor-schema.sql](sql/editor-schema.sql) in Supabase SQL Editor to create:
+Run [sql/setup.sql](sql/setup.sql) in Supabase SQL Editor to create:
+- `public.profiles` table with RLS
+- `public.waitlist` table
 - `public.projects` table with RLS
 - `public.pages` table with RLS
+- `public.page_zones` table with RLS
 - `public.elements` table with RLS
 - Triggers for `updated_at` and `last_edited_at`
+- Storage bucket policies
 
 Then set up storage bucket following [sql/storage-setup.md](sql/storage-setup.md):
 1. Create `project-photos` bucket (private)
-2. Run storage policies from [sql/create-storage-bucket.sql](sql/create-storage-bucket.sql)
+2. Storage policies are included in setup.sql
 
 Verify setup with:
 ```bash
@@ -809,12 +843,13 @@ npx tsx scripts/test-db-setup.ts
 - **Row Level Security (RLS):** All tables protected
   - Users can only access their own projects
   - Pages inherit access from project ownership
-  - Elements inherit access from page → project ownership
+  - Zones inherit access from page -> project ownership
+  - Elements inherit access from page -> project ownership
 - **Storage Policies:** Users can only upload/view/delete photos in their own folder
 - **Server-Side Auth:** All actions verify user authentication
 - **Path Validation:** Photo deletion verifies path ownership
 
 ---
 
-**Project Version**: 6.0.0 (With Photobook Editor)
+**Project Version**: 7.0.0 (With Zone-Based Layout System)
 **Framework**: Next.js 16.0.10 + React 19.2.0 + Supabase 2.89.0

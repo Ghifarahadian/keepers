@@ -23,6 +23,19 @@ export interface Page {
   created_at: string
   updated_at: string
   elements?: Element[]
+  zones?: PageZone[]  // Dynamic zones for this page
+}
+
+export interface PageZone {
+  id: string
+  page_id: string
+  zone_index: number
+  position_x: number
+  position_y: number
+  width: number
+  height: number
+  created_at: string
+  updated_at: string
 }
 
 export interface Element {
@@ -47,6 +60,9 @@ export interface Element {
   height: number
   rotation: number
   z_index: number
+
+  // Zone assignment (optional - which zone container this element belongs to)
+  zone_index?: number | null
 
   created_at: string
   updated_at: string
@@ -148,6 +164,7 @@ export interface EditorState {
   pages: Page[]
   currentPageId: string
   elements: Record<string, Element[]> // Keyed by pageId
+  zones: Record<string, PageZone[]> // Keyed by pageId - dynamic zones
   uploadedPhotos: UploadedPhoto[]
   selectedElementId: string | null
   isSaving: boolean
@@ -168,6 +185,8 @@ export type EditorAction =
   | { type: 'ADD_ELEMENT'; payload: { pageId: string; element: Element } }
   | { type: 'UPDATE_ELEMENT'; payload: { elementId: string; updates: Partial<Element> } }
   | { type: 'DELETE_ELEMENT'; payload: { elementId: string } }
+  | { type: 'SET_ZONES'; payload: { pageId: string; zones: PageZone[] } }
+  | { type: 'UPDATE_ZONE'; payload: { zoneId: string; updates: Partial<PageZone> } }
   | { type: 'SELECT_ELEMENT'; payload: string | null }
   | { type: 'ADD_UPLOADED_PHOTO'; payload: UploadedPhoto }
   | { type: 'REMOVE_UPLOADED_PHOTO'; payload: string }
@@ -216,6 +235,7 @@ export interface CreateElementInput {
   height: number
   rotation?: number
   z_index?: number
+  zone_index?: number | null
 }
 
 export interface UpdateElementInput {
@@ -231,6 +251,22 @@ export interface UpdateElementInput {
   height?: number
   rotation?: number
   z_index?: number
+}
+
+export interface CreateZoneInput {
+  page_id: string
+  zone_index: number
+  position_x: number
+  position_y: number
+  width: number
+  height: number
+}
+
+export interface UpdateZoneInput {
+  position_x?: number
+  position_y?: number
+  width?: number
+  height?: number
 }
 
 // ============================================
