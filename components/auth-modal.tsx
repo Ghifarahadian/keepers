@@ -6,7 +6,7 @@ import { validateEmail, validatePassword } from "@/lib/validation";
 import type { AuthModalProps, AuthView } from "@/types/auth";
 import { signIn, signUp } from "@/lib/auth-actions";
 
-export function AuthModal({ isOpen, onClose }: AuthModalProps) {
+export function AuthModal({ isOpen, onClose, message }: AuthModalProps) {
   const [view, setView] = useState<AuthView>("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +95,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-md w-full p-8 relative">
         {/* Close button */}
         <button
@@ -145,6 +145,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             <h2 className="text-3xl font-bold mb-6 text-center">
               {view === "login" ? "Welcome Back" : "Create Account"}
             </h2>
+
+            {/* Custom message */}
+            {message && (
+              <div className="mb-4 p-3 bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 text-[var(--color-accent)] rounded text-center">
+                {message}
+              </div>
+            )}
 
         {/* Error message */}
         {error && (

@@ -74,7 +74,7 @@ export function ProjectSelectorModal({ projects }: ProjectSelectorModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-2xl w-full p-8 relative max-h-[80vh] flex flex-col">
         {/* Close button */}
         <button

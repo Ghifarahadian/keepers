@@ -8,7 +8,7 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-[var(--color-primary-bg)]">
       <LandingHeader user={user} />
-      <Hero />
+      <Hero user={user} />
     </main>
   )
 }
