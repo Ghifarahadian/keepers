@@ -6,9 +6,9 @@ import { updatePage, createElement, deleteElement } from "@/lib/editor-actions"
 import { Check } from "lucide-react"
 
 export function LayoutsPanel() {
-  const { state, dispatch, addElementToCanvas } = useEditor()
+  const { state, dispatch, addElementToCanvas, getActivePage } = useEditor()
 
-  const currentPage = state.pages.find((p) => p.id === state.currentPageId)
+  const currentPage = getActivePage()
   const currentLayoutId = currentPage?.layout_id || "blank"
 
   const handleLayoutChange = async (layoutId: string) => {
@@ -26,7 +26,7 @@ export function LayoutsPanel() {
       const existingElements = state.elements[currentPage.id] || []
       for (const element of existingElements) {
         await deleteElement(element.id)
-        dispatch({ type: "DELETE_ELEMENT", payload: { elementId: element.id } })
+        dispatch({ type: "DELETE_ELEMENT", payload: { pageId: currentPage.id, elementId: element.id } })
       }
 
       // Create PictureContainers based on layout zones

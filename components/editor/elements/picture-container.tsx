@@ -38,7 +38,7 @@ export function PictureContainer({ element }: PictureContainerProps) {
     await updateElementPosition(element.id, {
       photo_url: null,
       photo_storage_path: null,
-    } as any)
+    })
   }, [element.id, updateElementPosition])
 
   const borderColor = isSelected ? 'rgba(212, 120, 108, 1)'

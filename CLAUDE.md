@@ -695,6 +695,10 @@ The editor uses a flexible zone-based layout system where:
 
 Layouts are defined in [types/editor.ts](types/editor.ts) with zone positions as percentages.
 
+**Type Definitions:**
+- `UpdateElementInput` supports `| null` for clearing fields (photo_url, photo_storage_path, text_content, etc.)
+- `UpdateElementInput` includes `zone_index?: number | null` for zone assignment
+
 ### Photo Storage
 
 Photos are stored in Supabase Storage in a private bucket called `project-photos`.
@@ -748,10 +752,12 @@ project-photos/
 **Photo Actions** ([lib/photo-upload-actions.ts](lib/photo-upload-actions.ts)):
 - `uploadPhoto(file, projectId)` - Upload single photo
 - `uploadMultiplePhotos(files, projectId)` - Upload multiple photos
-- `deletePhoto(path)` - Delete photo from storage
-- `deleteMultiplePhotos(paths)` - Delete multiple photos
-- `getPhotoUrl(path)` - Get signed URL for photo
+- `deletePhoto(path)` - Delete photo from storage (validates path ownership)
+- `deleteMultiplePhotos(paths)` - Delete multiple photos (validates path ownership)
+- `getPhotoUrl(path)` - Get signed URL for photo (validates path ownership)
 - `listProjectPhotos(projectId)` - List all photos in project
+
+**Note:** All server actions include authentication checks and throw `"Unauthorized"` if the user is not authenticated.
 
 ### Editor State Management
 
@@ -779,8 +785,12 @@ interface EditorState {
 - `SET_PROJECT`, `SET_PAGES`, `SET_CURRENT_PAGE`
 - `UPDATE_PROJECT_TITLE`, `ADD_PAGE`, `DELETE_PAGE`, `REORDER_PAGES`
 - `UPDATE_PAGE_LAYOUT`, `SET_ELEMENTS`, `ADD_ELEMENT`
-- `UPDATE_ELEMENT`, `DELETE_ELEMENT`, `SELECT_ELEMENT`, `SELECT_ZONE`
-- `SET_ZONES`, `UPDATE_ZONE`, `SET_DRAGGING_ZONE`
+- `UPDATE_ELEMENT` (payload: `{ pageId, elementId, updates }`)
+- `DELETE_ELEMENT` (payload: `{ pageId, elementId }`)
+- `SELECT_ELEMENT`, `SELECT_ZONE`
+- `SET_ZONES`, `UPDATE_ZONE` (payload: `{ pageId, zoneId, updates }`)
+- `DELETE_ZONE` (payload: `{ pageId, zoneId }`)
+- `SET_DRAGGING_ZONE`
 - `ADD_UPLOADED_PHOTO`, `REMOVE_UPLOADED_PHOTO`
 - `SET_SAVING`, `SET_LAST_SAVED`, `SET_ERROR`
 
@@ -847,10 +857,18 @@ npx tsx scripts/test-db-setup.ts
   - Zones inherit access from page -> project ownership
   - Elements inherit access from page -> project ownership
 - **Storage Policies:** Users can only upload/view/delete photos in their own folder
-- **Server-Side Auth:** All actions verify user authentication
-- **Path Validation:** Photo deletion verifies path ownership
+- **Server-Side Auth:** All server actions verify user authentication before any operation
+- **Path Validation:** Photo URL generation and deletion verify path ownership (`user.id/` prefix)
+
+### Performance Optimizations
+
+The editor reducer uses O(1) page-indexed lookups for element and zone updates:
+
+- `UPDATE_ELEMENT`, `DELETE_ELEMENT`, `UPDATE_ZONE`, `DELETE_ZONE` actions include `pageId` in payload
+- Direct page lookup instead of iterating all pages
+- Helper functions `findElementPageId()` and `findZonePageId()` in context for callers that don't have pageId
 
 ---
 
-**Project Version**: 7.1.0 (Simplified Zone Architecture)
+**Project Version**: 7.2.0 (Security & Performance Refactoring)
 **Framework**: Next.js 16.0.10 + React 19.2.0 + Supabase 2.89.0

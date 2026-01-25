@@ -57,8 +57,24 @@ function EditorContent() {
     if (!over || !dragData) return
 
     const dropTarget = over.data.current
-    const isCanvasDrop = over.id === "canvas"
+    const isCanvasDrop = String(over.id).startsWith("canvas-")
     const isPictureContainerDrop = dropTarget?.type === "picture-container"
+
+    // Get the page ID from the drop target
+    const getTargetPageId = (): string | null => {
+      if (dropTarget?.pageId) return dropTarget.pageId
+      // For canvas drops, determine which page based on left/right
+      if (isCanvasDrop) {
+        const spreadPages = state.pages.slice(
+          state.currentSpreadIndex * 2,
+          state.currentSpreadIndex * 2 + 2
+        )
+        const side = dropTarget?.side || (String(over.id).includes('left') ? 'left' : 'right')
+        const pageIndex = side === 'left' ? 0 : 1
+        return spreadPages[pageIndex]?.id || null
+      }
+      return null
+    }
 
     // Handle photo drops (from sidebar photos panel)
     if (dragData.type === "photo") {
@@ -75,6 +91,7 @@ function EditorContent() {
         dispatch({
           type: "UPDATE_ELEMENT",
           payload: {
+            pageId: element.page_id,
             elementId: element.id,
             updates: {
               photo_url: photo.url,
@@ -88,18 +105,21 @@ function EditorContent() {
 
     // Handle new element creation (from elements panel)
     if (dragData.type === "new-element" && isCanvasDrop) {
+      const targetPageId = getTargetPageId()
+      if (!targetPageId) return
+
       const elementType = dragData.elementType
 
       // Create element at center of canvas with default size
-      addElementToCanvas(state.currentPageId, {
+      addElementToCanvas(targetPageId, {
         type: elementType === "picture" ? "photo" : "text",
-        page_id: state.currentPageId,
+        page_id: targetPageId,
         position_x: 25,
         position_y: 25,
         width: 50,
         height: 50,
         rotation: 0,
-        z_index: state.elements[state.currentPageId]?.length || 0,
+        z_index: state.elements[targetPageId]?.length || 0,
       })
     }
   }

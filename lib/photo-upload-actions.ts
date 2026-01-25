@@ -154,6 +154,18 @@ export async function deleteMultiplePhotos(paths: string[]): Promise<void> {
 // Helper function to get photo URL from storage path
 export async function getPhotoUrl(path: string): Promise<string> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
+
+  // Verify the path belongs to the user
+  if (!path.startsWith(`${user.id}/`)) {
+    throw new Error("Unauthorized: Cannot access photo from another user")
+  }
 
   // Use signed URL for private buckets
   const { data, error } = await supabase.storage

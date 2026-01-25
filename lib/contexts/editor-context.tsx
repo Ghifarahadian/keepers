@@ -8,7 +8,8 @@ import { updateProject, updateElement, createElement, deleteElement, updateZone,
 const createInitialState = (project: Project, uploadedPhotos?: UploadedPhoto[]): EditorState => ({
   project,
   pages: project.pages || [],
-  currentPageId: project.pages?.[0]?.id || "",
+  currentSpreadIndex: 0, // Start at first spread (pages 0-1)
+  activePageSide: 'right', // Default to right page (front cover on first spread)
   elements: project.pages?.reduce((acc, page) => {
     acc[page.id] = page.elements || []
     return acc
@@ -35,8 +36,11 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     case "SET_PAGES":
       return { ...state, pages: action.payload }
 
-    case "SET_CURRENT_PAGE":
-      return { ...state, currentPageId: action.payload, selectedElementId: null, selectedZoneId: null }
+    case "SET_CURRENT_SPREAD":
+      return { ...state, currentSpreadIndex: action.payload, selectedElementId: null, selectedZoneId: null }
+
+    case "SET_ACTIVE_PAGE_SIDE":
+      return { ...state, activePageSide: action.payload }
 
     case "UPDATE_PROJECT_TITLE":
       return {
@@ -58,12 +62,15 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
       const newZones = { ...state.zones }
       delete newElements[action.payload]
       delete newZones[action.payload]
+      // Adjust spread index if it would be out of bounds
+      const maxSpreadIndex = Math.max(0, Math.floor((newPages.length - 1) / 2))
+      const newSpreadIndex = Math.min(state.currentSpreadIndex, maxSpreadIndex)
       return {
         ...state,
         pages: newPages,
         elements: newElements,
         zones: newZones,
-        currentPageId: state.currentPageId === action.payload ? newPages[0]?.id || "" : state.currentPageId,
+        currentSpreadIndex: newSpreadIndex,
       }
     }
 
@@ -95,24 +102,33 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case "UPDATE_ELEMENT": {
-      const newElements = { ...state.elements }
-      Object.keys(newElements).forEach((pageId) => {
-        newElements[pageId] = newElements[pageId].map((el) =>
-          el.id === action.payload.elementId ? { ...el, ...action.payload.updates } : el
-        )
-      })
-      return { ...state, elements: newElements }
+      const { pageId, elementId, updates } = action.payload
+      const pageElements = state.elements[pageId]
+      if (!pageElements) return state
+
+      return {
+        ...state,
+        elements: {
+          ...state.elements,
+          [pageId]: pageElements.map((el) =>
+            el.id === elementId ? { ...el, ...updates } : el
+          ),
+        },
+      }
     }
 
     case "DELETE_ELEMENT": {
-      const newElements = { ...state.elements }
-      Object.keys(newElements).forEach((pageId) => {
-        newElements[pageId] = newElements[pageId].filter((el) => el.id !== action.payload.elementId)
-      })
+      const { pageId, elementId } = action.payload
+      const pageElements = state.elements[pageId]
+      if (!pageElements) return state
+
       return {
         ...state,
-        elements: newElements,
-        selectedElementId: state.selectedElementId === action.payload.elementId ? null : state.selectedElementId,
+        elements: {
+          ...state.elements,
+          [pageId]: pageElements.filter((el) => el.id !== elementId),
+        },
+        selectedElementId: state.selectedElementId === elementId ? null : state.selectedElementId,
       }
     }
 
@@ -123,24 +139,33 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
       }
 
     case "UPDATE_ZONE": {
-      const newZones = { ...state.zones }
-      Object.keys(newZones).forEach((pageId) => {
-        newZones[pageId] = newZones[pageId].map((zone) =>
-          zone.id === action.payload.zoneId ? { ...zone, ...action.payload.updates } : zone
-        )
-      })
-      return { ...state, zones: newZones }
+      const { pageId, zoneId, updates } = action.payload
+      const pageZones = state.zones[pageId]
+      if (!pageZones) return state
+
+      return {
+        ...state,
+        zones: {
+          ...state.zones,
+          [pageId]: pageZones.map((zone) =>
+            zone.id === zoneId ? { ...zone, ...updates } : zone
+          ),
+        },
+      }
     }
 
     case "DELETE_ZONE": {
-      const newZones = { ...state.zones }
-      Object.keys(newZones).forEach((pageId) => {
-        newZones[pageId] = newZones[pageId].filter((zone) => zone.id !== action.payload.zoneId)
-      })
+      const { pageId, zoneId } = action.payload
+      const pageZones = state.zones[pageId]
+      if (!pageZones) return state
+
       return {
         ...state,
-        zones: newZones,
-        selectedZoneId: state.selectedZoneId === action.payload.zoneId ? null : state.selectedZoneId,
+        zones: {
+          ...state.zones,
+          [pageId]: pageZones.filter((zone) => zone.id !== zoneId),
+        },
+        selectedZoneId: state.selectedZoneId === zoneId ? null : state.selectedZoneId,
       }
     }
 
@@ -188,8 +213,11 @@ interface EditorContextValue {
   updateProjectTitle: (title: string) => void
   saveProject: () => Promise<void>
 
-  // Page actions
-  setCurrentPage: (pageId: string) => void
+  // Spread actions
+  setCurrentSpread: (spreadIndex: number) => void
+  getCurrentSpreadPages: () => [Page | null, Page | null]
+  setActivePageSide: (side: 'left' | 'right') => void
+  getActivePage: () => Page | null
 
   // Element actions
   addElementToCanvas: (pageId: string, element: Omit<Element, "id" | "created_at" | "updated_at">) => Promise<void>
@@ -251,10 +279,30 @@ export function EditorProvider({
     dispatch({ type: "UPDATE_PROJECT_TITLE", payload: title })
   }, [])
 
-  // Set current page
-  const setCurrentPage = useCallback((pageId: string) => {
-    dispatch({ type: "SET_CURRENT_PAGE", payload: pageId })
+  // Set current spread
+  const setCurrentSpread = useCallback((spreadIndex: number) => {
+    dispatch({ type: "SET_CURRENT_SPREAD", payload: spreadIndex })
   }, [])
+
+  // Get current spread pages (left and right)
+  const getCurrentSpreadPages = useCallback((): [Page | null, Page | null] => {
+    const leftIndex = state.currentSpreadIndex * 2
+    const rightIndex = leftIndex + 1
+    const leftPage = state.pages[leftIndex] || null
+    const rightPage = state.pages[rightIndex] || null
+    return [leftPage, rightPage]
+  }, [state.currentSpreadIndex, state.pages])
+
+  // Set active page side within the spread
+  const setActivePageSide = useCallback((side: 'left' | 'right') => {
+    dispatch({ type: "SET_ACTIVE_PAGE_SIDE", payload: side })
+  }, [])
+
+  // Get the currently active page
+  const getActivePage = useCallback((): Page | null => {
+    const pageIndex = state.currentSpreadIndex * 2 + (state.activePageSide === 'left' ? 0 : 1)
+    return state.pages[pageIndex] || null
+  }, [state.currentSpreadIndex, state.activePageSide, state.pages])
 
   // Add element to canvas
   const addElementToCanvas = useCallback(
@@ -283,32 +331,58 @@ export function EditorProvider({
     []
   )
 
+  // Helper to find pageId for an element
+  const findElementPageId = useCallback((elementId: string): string | null => {
+    for (const [pageId, elements] of Object.entries(state.elements)) {
+      if (elements.some(el => el.id === elementId)) {
+        return pageId
+      }
+    }
+    return null
+  }, [state.elements])
+
+  // Helper to find pageId for a zone
+  const findZonePageId = useCallback((zoneId: string): string | null => {
+    for (const [pageId, zones] of Object.entries(state.zones)) {
+      if (zones.some(z => z.id === zoneId)) {
+        return pageId
+      }
+    }
+    return null
+  }, [state.zones])
+
   // Update element locally only (no server call) - for dragging/resizing
   const updateElementLocal = useCallback((elementId: string, updates: UpdateElementInput) => {
-    dispatch({ type: "UPDATE_ELEMENT", payload: { elementId, updates } })
-  }, [])
+    const pageId = findElementPageId(elementId)
+    if (!pageId) return
+    dispatch({ type: "UPDATE_ELEMENT", payload: { pageId, elementId, updates } })
+  }, [findElementPageId])
 
   // Update element position and save to server
   const updateElementPosition = useCallback(async (elementId: string, updates: UpdateElementInput) => {
-    dispatch({ type: "UPDATE_ELEMENT", payload: { elementId, updates } })
+    const pageId = findElementPageId(elementId)
+    if (!pageId) return
+    dispatch({ type: "UPDATE_ELEMENT", payload: { pageId, elementId, updates } })
     try {
       await updateElement(elementId, updates)
     } catch (error) {
       console.error("Update element error:", error)
       dispatch({ type: "SET_ERROR", payload: "Failed to update photo" })
     }
-  }, [])
+  }, [findElementPageId])
 
   // Delete element
   const deleteElementFromCanvas = useCallback(async (elementId: string) => {
+    const pageId = findElementPageId(elementId)
+    if (!pageId) return
     try {
       await deleteElement(elementId)
-      dispatch({ type: "DELETE_ELEMENT", payload: { elementId } })
+      dispatch({ type: "DELETE_ELEMENT", payload: { pageId, elementId } })
     } catch (error) {
       console.error("Delete element error:", error)
       dispatch({ type: "SET_ERROR", payload: "Failed to delete photo" })
     }
-  }, [])
+  }, [findElementPageId])
 
   // Select element
   const selectElement = useCallback((elementId: string | null) => {
@@ -322,25 +396,29 @@ export function EditorProvider({
 
   // Update zone position and save to server
   const updateZonePosition = useCallback(async (zoneId: string, updates: UpdateZoneInput) => {
-    dispatch({ type: "UPDATE_ZONE", payload: { zoneId, updates } })
+    const pageId = findZonePageId(zoneId)
+    if (!pageId) return
+    dispatch({ type: "UPDATE_ZONE", payload: { pageId, zoneId, updates } })
     try {
       await updateZone(zoneId, updates)
     } catch (error) {
       console.error("Update zone error:", error)
       dispatch({ type: "SET_ERROR", payload: "Failed to update zone" })
     }
-  }, [])
+  }, [findZonePageId])
 
   // Delete zone from canvas
   const deleteZoneFromCanvas = useCallback(async (zoneId: string) => {
+    const pageId = findZonePageId(zoneId)
+    if (!pageId) return
     try {
       await deleteZone(zoneId)
-      dispatch({ type: "DELETE_ZONE", payload: { zoneId } })
+      dispatch({ type: "DELETE_ZONE", payload: { pageId, zoneId } })
     } catch (error) {
       console.error("Delete zone error:", error)
       dispatch({ type: "SET_ERROR", payload: "Failed to delete zone" })
     }
-  }, [])
+  }, [findZonePageId])
 
   // Set dragging zone state (for thumbnail optimization)
   const setDraggingZone = useCallback((isDragging: boolean) => {
@@ -362,7 +440,10 @@ export function EditorProvider({
     dispatch,
     updateProjectTitle,
     saveProject,
-    setCurrentPage,
+    setCurrentSpread,
+    getCurrentSpreadPages,
+    setActivePageSide,
+    getActivePage,
     addElementToCanvas,
     updateElementLocal,
     updateElementPosition,

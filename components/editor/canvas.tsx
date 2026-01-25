@@ -4,46 +4,95 @@ import { useEditor } from "@/lib/contexts/editor-context"
 import { PictureContainer } from "./elements/picture-container"
 import { TextContainer } from "./elements/text-container"
 import { useDroppable } from "@dnd-kit/core"
+import type { Page } from "@/types/editor"
 
-export function EditorCanvas() {
-  const { state, selectElement } = useEditor()
-  const { setNodeRef } = useDroppable({ id: "canvas" })
+// Individual page component within the spread
+function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' }) {
+  const { state, selectElement, setActivePageSide } = useEditor()
+  const { setNodeRef } = useDroppable({
+    id: page ? `canvas-${side}` : `canvas-${side}-empty`,
+    data: { pageId: page?.id, side }
+  })
 
-  const currentPage = state.pages.find((p) => p.id === state.currentPageId)
-  const currentElements = state.elements[state.currentPageId] || []
+  const elements = page ? (state.elements[page.id] || []) : []
+  const isActive = state.activePageSide === side
 
-  if (!currentPage) {
-    return (
-      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: 'var(--color-primary-bg-light)' }}>
-        <p style={{ color: 'var(--color-primary-text)', fontFamily: 'var(--font-serif)' }}>No page selected</p>
-      </div>
-    )
+  const handleClick = () => {
+    selectElement(null)
+    setActivePageSide(side)
   }
 
   return (
-    <div className="flex-1 flex items-center justify-center p-8" style={{ backgroundColor: 'var(--color-primary-bg-light)' }}>
-      <div
-        ref={setNodeRef}
-        data-canvas
-        onClick={() => selectElement(null)}
-        className="relative shadow-2xl"
-        style={{
-          aspectRatio: "8.5 / 11",
-          width: "min(600px, 90%)",
-          maxHeight: "90vh",
-          minHeight: "400px",
-          backgroundColor: 'var(--color-white)'
-        }}
-      >
-        {/* Render all elements with their respective containers */}
-        {currentElements.map((element) => {
+    <div
+      ref={setNodeRef}
+      data-canvas
+      data-page-id={page?.id}
+      data-side={side}
+      onClick={handleClick}
+      className="relative flex-1"
+      style={{
+        aspectRatio: "8.5 / 11",
+        backgroundColor: 'var(--color-white)',
+        outline: isActive ? '2px solid var(--color-accent)' : 'none',
+        outlineOffset: '-2px',
+      }}
+    >
+      {page ? (
+        // Render elements for this page
+        elements.map((element) => {
           if (element.type === 'photo') {
             return <PictureContainer key={element.id} element={element} />
           } else if (element.type === 'text') {
             return <TextContainer key={element.id} element={element} />
           }
           return null
-        })}
+        })
+      ) : (
+        // Empty page placeholder
+        <div className="absolute inset-0 flex items-center justify-center">
+          <p className="text-sm" style={{ color: 'var(--color-secondary)', fontFamily: 'var(--font-serif)' }}>
+            No page
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function EditorCanvas() {
+  const { getCurrentSpreadPages } = useEditor()
+  const [leftPage, rightPage] = getCurrentSpreadPages()
+
+  // Check if there are any pages at all
+  if (!leftPage && !rightPage) {
+    return (
+      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: 'var(--color-primary-bg-light)' }}>
+        <p style={{ color: 'var(--color-primary-text)', fontFamily: 'var(--font-serif)' }}>No pages in this project</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 flex items-center justify-center p-8" style={{ backgroundColor: 'var(--color-primary-bg-light)' }}>
+      {/* Spread container - two pages side by side */}
+      <div
+        className="flex shadow-2xl"
+        style={{
+          width: "min(1000px, 95%)",
+          maxHeight: "85vh",
+        }}
+      >
+        {/* Left page (back cover on spread 0) */}
+        <SpreadPage page={leftPage} side="left" />
+
+        {/* Binding gutter */}
+        <div
+          className="w-1 flex-shrink-0"
+          style={{ backgroundColor: 'var(--color-border)' }}
+        />
+
+        {/* Right page (front cover on spread 0) */}
+        <SpreadPage page={rightPage} side="right" />
       </div>
     </div>
   )

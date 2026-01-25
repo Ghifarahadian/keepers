@@ -17,6 +17,9 @@ import type {
   UpdateZoneInput,
 } from "@/types/editor"
 
+// Supabase returns page_zones instead of zones due to relation naming
+type PageWithDbRelations = Page & { page_zones?: PageZone[] }
+
 // ============================================
 // PROJECT ACTIONS
 // ============================================
@@ -46,8 +49,8 @@ export async function createProject(
 
   if (projectError) throw projectError
 
-  // Create first page
-  const { data: page, error: pageError } = await supabase
+  // Create first spread (2 pages - back cover and front cover)
+  const { data: page1, error: page1Error } = await supabase
     .from("pages")
     .insert({
       project_id: project.id,
@@ -57,11 +60,26 @@ export async function createProject(
     .select()
     .single()
 
-  if (pageError) throw pageError
+  if (page1Error) throw page1Error
+
+  const { data: page2, error: page2Error } = await supabase
+    .from("pages")
+    .insert({
+      project_id: project.id,
+      page_number: 2,
+      layout_id: "blank",
+    })
+    .select()
+    .single()
+
+  if (page2Error) throw page2Error
 
   return {
     ...project,
-    pages: [{ ...page, elements: [] }],
+    pages: [
+      { ...page1, elements: [], zones: [] },
+      { ...page2, elements: [], zones: [] },
+    ],
   }
 }
 
@@ -99,13 +117,13 @@ export async function getProject(projectId: string): Promise<Project | null> {
   if (project && project.pages) {
     project.pages = project.pages
       .sort((a: Page, b: Page) => a.page_number - b.page_number)
-      .map((page: Page) => ({
+      .map((page: PageWithDbRelations) => ({
         ...page,
         elements: page.elements
           ? page.elements.sort((a: Element, b: Element) => a.z_index - b.z_index)
           : [],
-        zones: (page as any).page_zones
-          ? (page as any).page_zones.sort((a: PageZone, b: PageZone) => a.zone_index - b.zone_index)
+        zones: page.page_zones
+          ? page.page_zones.sort((a: PageZone, b: PageZone) => a.zone_index - b.zone_index)
           : [],
       }))
   }
@@ -250,6 +268,13 @@ export async function updatePage(
   updates: UpdatePageInput
 ): Promise<void> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   const { error } = await supabase
     .from("pages")
@@ -270,6 +295,13 @@ export async function updatePage(
 
 export async function deletePage(pageId: string, projectId: string): Promise<void> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   const { error } = await supabase.from("pages").delete().eq("id", pageId)
 
@@ -283,6 +315,13 @@ export async function reorderPages(
   pageIds: string[]
 ): Promise<void> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   // Update page_number for each page
   const updates = pageIds.map((pageId, index) =>
@@ -345,6 +384,13 @@ export async function updateElement(
   updates: UpdateElementInput
 ): Promise<void> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   const { error } = await supabase
     .from("elements")
@@ -356,6 +402,13 @@ export async function updateElement(
 
 export async function deleteElement(elementId: string): Promise<void> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   const { error } = await supabase.from("elements").delete().eq("id", elementId)
 
@@ -366,6 +419,13 @@ export async function batchUpdateElements(
   updates: Array<{ id: string; data: UpdateElementInput }>
 ): Promise<void> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   // Execute updates in parallel
   const promises = updates.map(({ id, data }) =>
@@ -384,6 +444,13 @@ export async function batchUpdateElements(
 
 export async function batchDeleteElements(elementIds: string[]): Promise<void> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   const { error } = await supabase
     .from("elements")
@@ -399,6 +466,13 @@ export async function batchDeleteElements(elementIds: string[]): Promise<void> {
 
 export async function createZone(input: CreateZoneInput): Promise<PageZone> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   const { data: zone, error } = await supabase
     .from("page_zones")
@@ -422,6 +496,13 @@ export async function updateZone(
   updates: UpdateZoneInput
 ): Promise<void> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   const { error } = await supabase
     .from("page_zones")
@@ -433,6 +514,13 @@ export async function updateZone(
 
 export async function deleteZone(zoneId: string): Promise<void> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   const { error } = await supabase.from("page_zones").delete().eq("id", zoneId)
 
@@ -441,6 +529,13 @@ export async function deleteZone(zoneId: string): Promise<void> {
 
 export async function getPageZones(pageId: string): Promise<PageZone[]> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   const { data: zones, error } = await supabase
     .from("page_zones")
@@ -457,6 +552,13 @@ export async function initializeZonesFromLayout(
   layoutId: string
 ): Promise<PageZone[]> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
 
   // Import LAYOUTS to get zone templates
   const { LAYOUTS } = await import("@/types/editor")

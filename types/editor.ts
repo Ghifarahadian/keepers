@@ -166,7 +166,8 @@ export const LAYOUTS: Layout[] = [
 export interface EditorState {
   project: Project
   pages: Page[]
-  currentPageId: string
+  currentSpreadIndex: number // Index of current spread (0 = pages 0-1, 1 = pages 2-3, etc.)
+  activePageSide: 'left' | 'right' // Which page in the spread is active for editing
   elements: Record<string, Element[]> // Keyed by pageId
   zones: Record<string, PageZone[]> // Keyed by pageId - dynamic zones
   uploadedPhotos: UploadedPhoto[]
@@ -181,7 +182,8 @@ export interface EditorState {
 export type EditorAction =
   | { type: 'SET_PROJECT'; payload: Project }
   | { type: 'SET_PAGES'; payload: Page[] }
-  | { type: 'SET_CURRENT_PAGE'; payload: string }
+  | { type: 'SET_CURRENT_SPREAD'; payload: number }
+  | { type: 'SET_ACTIVE_PAGE_SIDE'; payload: 'left' | 'right' }
   | { type: 'UPDATE_PROJECT_TITLE'; payload: string }
   | { type: 'ADD_PAGE'; payload: Page }
   | { type: 'DELETE_PAGE'; payload: string }
@@ -189,11 +191,11 @@ export type EditorAction =
   | { type: 'UPDATE_PAGE_LAYOUT'; payload: { pageId: string; layoutId: string } }
   | { type: 'SET_ELEMENTS'; payload: { pageId: string; elements: Element[] } }
   | { type: 'ADD_ELEMENT'; payload: { pageId: string; element: Element } }
-  | { type: 'UPDATE_ELEMENT'; payload: { elementId: string; updates: Partial<Element> } }
-  | { type: 'DELETE_ELEMENT'; payload: { elementId: string } }
+  | { type: 'UPDATE_ELEMENT'; payload: { pageId: string; elementId: string; updates: Partial<Element> } }
+  | { type: 'DELETE_ELEMENT'; payload: { pageId: string; elementId: string } }
   | { type: 'SET_ZONES'; payload: { pageId: string; zones: PageZone[] } }
-  | { type: 'UPDATE_ZONE'; payload: { zoneId: string; updates: Partial<PageZone> } }
-  | { type: 'DELETE_ZONE'; payload: { zoneId: string } }
+  | { type: 'UPDATE_ZONE'; payload: { pageId: string; zoneId: string; updates: Partial<PageZone> } }
+  | { type: 'DELETE_ZONE'; payload: { pageId: string; zoneId: string } }
   | { type: 'SELECT_ELEMENT'; payload: string | null }
   | { type: 'SELECT_ZONE'; payload: string | null }
   | { type: 'ADD_UPLOADED_PHOTO'; payload: UploadedPhoto }
@@ -252,22 +254,23 @@ export interface CreateElementInput {
 }
 
 export interface UpdateElementInput {
-  photo_url?: string
-  photo_storage_path?: string
-  text_content?: string
-  font_family?: string
-  font_size?: number
-  font_color?: string
-  font_weight?: 'normal' | 'bold' | 'light'
-  font_style?: 'normal' | 'italic'
-  text_align?: 'left' | 'center' | 'right'
-  text_decoration?: 'none' | 'underline'
+  photo_url?: string | null
+  photo_storage_path?: string | null
+  text_content?: string | null
+  font_family?: string | null
+  font_size?: number | null
+  font_color?: string | null
+  font_weight?: 'normal' | 'bold' | 'light' | null
+  font_style?: 'normal' | 'italic' | null
+  text_align?: 'left' | 'center' | 'right' | null
+  text_decoration?: 'none' | 'underline' | null
   position_x?: number
   position_y?: number
   width?: number
   height?: number
   rotation?: number
   z_index?: number
+  zone_index?: number | null
 }
 
 export interface CreateZoneInput {

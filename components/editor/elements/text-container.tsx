@@ -41,7 +41,7 @@ export function TextContainer({ element }: TextContainerProps) {
     if (textContent !== element.text_content) {
       updateElementPosition(element.id, {
         text_content: textContent,
-      } as any)
+      })
     }
   }, [element.id, element.text_content, textContent, updateElementPosition])
 
