@@ -207,14 +207,14 @@ export function EditorPagebar() {
                 page={spread.leftPage}
                 elements={spread.leftPage ? (state.elements[spread.leftPage.id] || []) : []}
                 uploadedPhotos={state.uploadedPhotos}
-                isDragging={state.isDraggingZone}
+                isDragging={state.isDragging}
               />
               {/* Right page thumbnail */}
               <PageThumbnail
                 page={spread.rightPage}
                 elements={spread.rightPage ? (state.elements[spread.rightPage.id] || []) : []}
                 uploadedPhotos={state.uploadedPhotos}
-                isDragging={state.isDraggingZone}
+                isDragging={state.isDragging}
               />
 
               {/* Delete button (only show if more than 1 spread) */}

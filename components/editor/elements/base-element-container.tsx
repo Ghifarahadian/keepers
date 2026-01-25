@@ -52,7 +52,7 @@ export function BaseElementContainer({
   externalRef,
   renderToolbar,
 }: BaseElementContainerProps) {
-  const { state, selectElement, updateElementPosition, setDraggingZone } = useEditor()
+  const { state, selectElement, updateElementPosition, setDragging } = useEditor()
 
   const containerRef = useRef<HTMLDivElement>(null)
   const isSelected = state.selectedElementId === element.id
@@ -80,7 +80,7 @@ export function BaseElementContainer({
       if (!canvas) return
 
       isDragging.current = true
-      setDraggingZone(true)
+      setDragging(true)
       dragStart.current = { x: e.clientX, y: e.clientY }
       startPosition.current = {
         x: element.position_x,
@@ -114,7 +114,7 @@ export function BaseElementContainer({
 
       const handleMouseUp = () => {
         isDragging.current = false
-        setDraggingZone(false)
+        setDragging(false)
         document.removeEventListener('mousemove', handleMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
 
@@ -132,7 +132,7 @@ export function BaseElementContainer({
 
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
-    }, [element, isDragDisabled, selectElement, updateElementPosition, setDraggingZone])
+    }, [element, isDragDisabled, selectElement, updateElementPosition, setDragging])
 
     const handleResizeMouseDown = useCallback((e: React.MouseEvent, handle: ResizeHandle) => {
       if (!containerRef.current) return
@@ -144,7 +144,7 @@ export function BaseElementContainer({
       if (!canvas) return
 
       isResizing.current = handle
-      setDraggingZone(true)
+      setDragging(true)
       dragStart.current = { x: e.clientX, y: e.clientY }
       startPosition.current = {
         x: element.position_x,
@@ -218,7 +218,7 @@ export function BaseElementContainer({
 
       const handleMouseUp = () => {
         isResizing.current = null
-        setDraggingZone(false)
+        setDragging(false)
         document.removeEventListener('mousemove', handleMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
 
@@ -238,7 +238,7 @@ export function BaseElementContainer({
 
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
-    }, [element, updateElementPosition, setDraggingZone])
+    }, [element, updateElementPosition, setDragging])
 
     // Combine internal and external refs
     const setRef = useCallback((node: HTMLDivElement | null) => {

@@ -6,19 +6,13 @@ import type {
   Project,
   Page,
   Element,
-  PageZone,
   CreateProjectInput,
   UpdateProjectInput,
   CreatePageInput,
   UpdatePageInput,
   CreateElementInput,
   UpdateElementInput,
-  CreateZoneInput,
-  UpdateZoneInput,
 } from "@/types/editor"
-
-// Supabase returns page_zones instead of zones due to relation naming
-type PageWithDbRelations = Page & { page_zones?: PageZone[] }
 
 // ============================================
 // PROJECT ACTIONS
@@ -77,8 +71,8 @@ export async function createProject(
   return {
     ...project,
     pages: [
-      { ...page1, elements: [], zones: [] },
-      { ...page2, elements: [], zones: [] },
+      { ...page1, elements: [] },
+      { ...page2, elements: [] },
     ],
   }
 }
@@ -91,7 +85,7 @@ export async function getProject(projectId: string): Promise<Project | null> {
 
   if (!user) return null
 
-  // Get project with pages, elements, and zones
+  // Get project with pages and elements
   const { data: project, error } = await supabase
     .from("projects")
     .select(
@@ -99,8 +93,7 @@ export async function getProject(projectId: string): Promise<Project | null> {
       *,
       pages (
         *,
-        elements (*),
-        page_zones:page_zones (*)
+        elements (*)
       )
     `
     )
@@ -113,17 +106,14 @@ export async function getProject(projectId: string): Promise<Project | null> {
     return null
   }
 
-  // Sort pages by page_number, elements by z_index, and zones by zone_index
+  // Sort pages by page_number and elements by z_index
   if (project && project.pages) {
     project.pages = project.pages
       .sort((a: Page, b: Page) => a.page_number - b.page_number)
-      .map((page: PageWithDbRelations) => ({
+      .map((page: Page) => ({
         ...page,
         elements: page.elements
           ? page.elements.sort((a: Element, b: Element) => a.z_index - b.z_index)
-          : [],
-        zones: page.page_zones
-          ? page.page_zones.sort((a: PageZone, b: PageZone) => a.zone_index - b.zone_index)
           : [],
       }))
   }
@@ -193,7 +183,7 @@ export async function deleteProject(projectId: string): Promise<void> {
     console.error("Storage deletion error:", storageError)
   }
 
-  // Delete project (cascades to pages, elements, zones via DB constraints)
+  // Delete project (cascades to pages, elements via DB constraints)
   const { error } = await supabase
     .from("projects")
     .delete()
@@ -256,11 +246,8 @@ export async function createPage(input: CreatePageInput): Promise<Page> {
 
   if (error) throw error
 
-  // Initialize zones from layout template
-  const zones = await initializeZonesFromLayout(page.id, layoutId)
-
   revalidatePath(`/editor/${input.project_id}`)
-  return { ...page, elements: [], zones } as Page
+  return { ...page, elements: [] } as Page
 }
 
 export async function updatePage(
@@ -282,15 +269,6 @@ export async function updatePage(
     .eq("id", pageId)
 
   if (error) throw error
-
-  // If layout changed, reinitialize zones
-  if (updates.layout_id) {
-    // Delete existing zones
-    await supabase.from("page_zones").delete().eq("page_id", pageId)
-
-    // Initialize new zones from layout
-    await initializeZonesFromLayout(pageId, updates.layout_id)
-  }
 }
 
 export async function deletePage(pageId: string, projectId: string): Promise<void> {
@@ -369,7 +347,6 @@ export async function createElement(
       height: input.height,
       rotation: input.rotation || 0,
       z_index: input.z_index || 0,
-      zone_index: input.zone_index,
     })
     .select()
     .single()
@@ -458,136 +435,4 @@ export async function batchDeleteElements(elementIds: string[]): Promise<void> {
     .in("id", elementIds)
 
   if (error) throw error
-}
-
-// ============================================
-// ZONE ACTIONS
-// ============================================
-
-export async function createZone(input: CreateZoneInput): Promise<PageZone> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    throw new Error("Unauthorized")
-  }
-
-  const { data: zone, error } = await supabase
-    .from("page_zones")
-    .insert({
-      page_id: input.page_id,
-      zone_index: input.zone_index,
-      position_x: input.position_x,
-      position_y: input.position_y,
-      width: input.width,
-      height: input.height,
-    })
-    .select()
-    .single()
-
-  if (error) throw error
-  return zone
-}
-
-export async function updateZone(
-  zoneId: string,
-  updates: UpdateZoneInput
-): Promise<void> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    throw new Error("Unauthorized")
-  }
-
-  const { error } = await supabase
-    .from("page_zones")
-    .update(updates)
-    .eq("id", zoneId)
-
-  if (error) throw error
-}
-
-export async function deleteZone(zoneId: string): Promise<void> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    throw new Error("Unauthorized")
-  }
-
-  const { error } = await supabase.from("page_zones").delete().eq("id", zoneId)
-
-  if (error) throw error
-}
-
-export async function getPageZones(pageId: string): Promise<PageZone[]> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    throw new Error("Unauthorized")
-  }
-
-  const { data: zones, error } = await supabase
-    .from("page_zones")
-    .select("*")
-    .eq("page_id", pageId)
-    .order("zone_index", { ascending: true })
-
-  if (error) throw error
-  return zones || []
-}
-
-export async function initializeZonesFromLayout(
-  pageId: string,
-  layoutId: string
-): Promise<PageZone[]> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    throw new Error("Unauthorized")
-  }
-
-  // Import LAYOUTS to get zone templates
-  const { LAYOUTS } = await import("@/types/editor")
-  const layout = LAYOUTS.find((l) => l.id === layoutId)
-
-  if (!layout) {
-    throw new Error(`Layout ${layoutId} not found`)
-  }
-
-  // Handle blank layout (create one full-canvas zone)
-  const zones = layout.zones.length === 0
-    ? [{ position_x: 0, position_y: 0, width: 100, height: 100 }]
-    : layout.zones
-
-  // Create zones from template
-  const zoneInputs = zones.map((zone, index) => ({
-    page_id: pageId,
-    zone_index: index,
-    position_x: zone.position_x,
-    position_y: zone.position_y,
-    width: zone.width,
-    height: zone.height,
-  }))
-
-  const { data: createdZones, error } = await supabase
-    .from("page_zones")
-    .insert(zoneInputs)
-    .select()
-
-  if (error) throw error
-  return createdZones || []
 }

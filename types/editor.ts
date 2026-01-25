@@ -23,19 +23,6 @@ export interface Page {
   created_at: string
   updated_at: string
   elements?: Element[]
-  zones?: PageZone[]  // Dynamic zones for this page
-}
-
-export interface PageZone {
-  id: string
-  page_id: string
-  zone_index: number
-  position_x: number
-  position_y: number
-  width: number
-  height: number
-  created_at: string
-  updated_at: string
 }
 
 export interface Element {
@@ -65,9 +52,6 @@ export interface Element {
   rotation: number
   z_index: number
 
-  // Zone assignment (optional - which zone container this element belongs to)
-  zone_index?: number | null
-
   created_at: string
   updated_at: string
 }
@@ -80,6 +64,7 @@ export interface UploadedPhoto {
   uploaded_at: string
 }
 
+// Layout templates for creating elements
 export interface Layout {
   id: string
   name: string
@@ -169,14 +154,12 @@ export interface EditorState {
   currentSpreadIndex: number // Index of current spread (0 = pages 0-1, 1 = pages 2-3, etc.)
   activePageSide: 'left' | 'right' // Which page in the spread is active for editing
   elements: Record<string, Element[]> // Keyed by pageId
-  zones: Record<string, PageZone[]> // Keyed by pageId - dynamic zones
   uploadedPhotos: UploadedPhoto[]
   selectedElementId: string | null
-  selectedZoneId: string | null // For selecting empty zones
   isSaving: boolean
   lastSaved: string | null
   error: string | null
-  isDraggingZone: boolean // True while dragging/resizing a zone
+  isDragging: boolean // True while dragging/resizing an element
 }
 
 export type EditorAction =
@@ -193,17 +176,13 @@ export type EditorAction =
   | { type: 'ADD_ELEMENT'; payload: { pageId: string; element: Element } }
   | { type: 'UPDATE_ELEMENT'; payload: { pageId: string; elementId: string; updates: Partial<Element> } }
   | { type: 'DELETE_ELEMENT'; payload: { pageId: string; elementId: string } }
-  | { type: 'SET_ZONES'; payload: { pageId: string; zones: PageZone[] } }
-  | { type: 'UPDATE_ZONE'; payload: { pageId: string; zoneId: string; updates: Partial<PageZone> } }
-  | { type: 'DELETE_ZONE'; payload: { pageId: string; zoneId: string } }
   | { type: 'SELECT_ELEMENT'; payload: string | null }
-  | { type: 'SELECT_ZONE'; payload: string | null }
   | { type: 'ADD_UPLOADED_PHOTO'; payload: UploadedPhoto }
   | { type: 'REMOVE_UPLOADED_PHOTO'; payload: string }
   | { type: 'SET_SAVING'; payload: boolean }
   | { type: 'SET_LAST_SAVED'; payload: string }
   | { type: 'SET_ERROR'; payload: string | null }
-  | { type: 'SET_DRAGGING_ZONE'; payload: boolean }
+  | { type: 'SET_DRAGGING'; payload: boolean }
 
 // ============================================
 // FORM TYPES
@@ -250,7 +229,6 @@ export interface CreateElementInput {
   height: number
   rotation?: number
   z_index?: number
-  zone_index?: number | null
 }
 
 export interface UpdateElementInput {
@@ -270,23 +248,6 @@ export interface UpdateElementInput {
   height?: number
   rotation?: number
   z_index?: number
-  zone_index?: number | null
-}
-
-export interface CreateZoneInput {
-  page_id: string
-  zone_index: number
-  position_x: number
-  position_y: number
-  width: number
-  height: number
-}
-
-export interface UpdateZoneInput {
-  position_x?: number
-  position_y?: number
-  width?: number
-  height?: number
 }
 
 // ============================================
