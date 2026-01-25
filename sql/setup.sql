@@ -551,3 +551,463 @@ BEGIN
     ALTER TABLE public.elements ADD COLUMN text_decoration VARCHAR(20) DEFAULT 'none';
   END IF;
 END $$;
+
+-- ============================================
+-- SECTION 9: ADMIN FLAG ON PROFILES
+-- ============================================
+-- Add is_admin column to profiles for admin access control
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'profiles' AND column_name = 'is_admin') THEN
+    ALTER TABLE public.profiles ADD COLUMN is_admin BOOLEAN DEFAULT FALSE;
+  END IF;
+END $$;
+
+-- Index for admin lookups
+CREATE INDEX IF NOT EXISTS idx_profiles_is_admin ON public.profiles(is_admin) WHERE is_admin = TRUE;
+
+-- ============================================
+-- SECTION 10: LAYOUTS TABLE
+-- ============================================
+-- Stores layout templates (migrated from types/editor.ts LAYOUTS array)
+
+CREATE TABLE IF NOT EXISTS public.layouts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug VARCHAR(50) NOT NULL UNIQUE,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  icon VARCHAR(50),
+  thumbnail_url TEXT,
+  is_system BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_layouts_slug ON public.layouts(slug);
+CREATE INDEX IF NOT EXISTS idx_layouts_active ON public.layouts(is_active, sort_order);
+
+-- Enable RLS
+ALTER TABLE public.layouts ENABLE ROW LEVEL SECURITY;
+
+-- Everyone can read active layouts
+DROP POLICY IF EXISTS "Anyone can view active layouts" ON public.layouts;
+CREATE POLICY "Anyone can view active layouts"
+  ON public.layouts FOR SELECT
+  USING (is_active = TRUE);
+
+-- Admins can manage layouts (all operations)
+DROP POLICY IF EXISTS "Admins can manage layouts" ON public.layouts;
+CREATE POLICY "Admins can manage layouts"
+  ON public.layouts FOR ALL
+  USING (EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  ));
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS on_layout_updated ON public.layouts;
+CREATE TRIGGER on_layout_updated
+  BEFORE UPDATE ON public.layouts
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_updated_at();
+
+-- ============================================
+-- SECTION 11: LAYOUT ZONES TABLE
+-- ============================================
+-- Stores zone configurations for each layout template
+
+CREATE TABLE IF NOT EXISTS public.layout_zones (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  layout_id UUID NOT NULL REFERENCES public.layouts(id) ON DELETE CASCADE,
+  zone_index INT NOT NULL,
+  position_x FLOAT NOT NULL,
+  position_y FLOAT NOT NULL,
+  width FLOAT NOT NULL,
+  height FLOAT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(layout_id, zone_index)
+);
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_layout_zones_layout_id ON public.layout_zones(layout_id);
+
+-- Enable RLS
+ALTER TABLE public.layout_zones ENABLE ROW LEVEL SECURITY;
+
+-- Everyone can view layout zones for active layouts
+DROP POLICY IF EXISTS "Anyone can view layout zones" ON public.layout_zones;
+CREATE POLICY "Anyone can view layout zones"
+  ON public.layout_zones FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM public.layouts
+    WHERE layouts.id = layout_zones.layout_id AND layouts.is_active = TRUE
+  ));
+
+-- Admins can manage layout zones
+DROP POLICY IF EXISTS "Admins can manage layout zones" ON public.layout_zones;
+CREATE POLICY "Admins can manage layout zones"
+  ON public.layout_zones FOR ALL
+  USING (EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  ));
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS on_layout_zone_updated ON public.layout_zones;
+CREATE TRIGGER on_layout_zone_updated
+  BEFORE UPDATE ON public.layout_zones
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_updated_at();
+
+-- ============================================
+-- SECTION 12: TEMPLATE CATEGORIES TABLE
+-- ============================================
+-- Stores categories for organizing templates
+
+CREATE TABLE IF NOT EXISTS public.template_categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug VARCHAR(50) NOT NULL UNIQUE,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  icon VARCHAR(50),
+  sort_order INT DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_template_categories_slug ON public.template_categories(slug);
+CREATE INDEX IF NOT EXISTS idx_template_categories_active ON public.template_categories(is_active, sort_order);
+
+-- Enable RLS
+ALTER TABLE public.template_categories ENABLE ROW LEVEL SECURITY;
+
+-- Everyone can view active categories
+DROP POLICY IF EXISTS "Anyone can view active categories" ON public.template_categories;
+CREATE POLICY "Anyone can view active categories"
+  ON public.template_categories FOR SELECT
+  USING (is_active = TRUE);
+
+-- Admins can manage categories
+DROP POLICY IF EXISTS "Admins can manage categories" ON public.template_categories;
+CREATE POLICY "Admins can manage categories"
+  ON public.template_categories FOR ALL
+  USING (EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  ));
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS on_template_category_updated ON public.template_categories;
+CREATE TRIGGER on_template_category_updated
+  BEFORE UPDATE ON public.template_categories
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_updated_at();
+
+-- ============================================
+-- SECTION 13: TEMPLATES TABLE
+-- ============================================
+-- Stores photobook templates
+
+CREATE TABLE IF NOT EXISTS public.templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug VARCHAR(100) NOT NULL UNIQUE,
+  name VARCHAR(200) NOT NULL,
+  description TEXT,
+  category_id UUID REFERENCES public.template_categories(id) ON DELETE SET NULL,
+  thumbnail_url TEXT,
+  preview_images JSONB DEFAULT '[]',
+  page_count INT NOT NULL DEFAULT 10,
+  is_featured BOOLEAN DEFAULT FALSE,
+  is_premium BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  sort_order INT DEFAULT 0,
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_templates_slug ON public.templates(slug);
+CREATE INDEX IF NOT EXISTS idx_templates_category ON public.templates(category_id);
+CREATE INDEX IF NOT EXISTS idx_templates_featured ON public.templates(is_featured) WHERE is_featured = TRUE;
+CREATE INDEX IF NOT EXISTS idx_templates_active ON public.templates(is_active, sort_order);
+
+-- Enable RLS
+ALTER TABLE public.templates ENABLE ROW LEVEL SECURITY;
+
+-- Everyone can view active templates
+DROP POLICY IF EXISTS "Anyone can view active templates" ON public.templates;
+CREATE POLICY "Anyone can view active templates"
+  ON public.templates FOR SELECT
+  USING (is_active = TRUE);
+
+-- Admins can manage templates
+DROP POLICY IF EXISTS "Admins can manage templates" ON public.templates;
+CREATE POLICY "Admins can manage templates"
+  ON public.templates FOR ALL
+  USING (EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  ));
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS on_template_updated ON public.templates;
+CREATE TRIGGER on_template_updated
+  BEFORE UPDATE ON public.templates
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_updated_at();
+
+-- ============================================
+-- SECTION 14: TEMPLATE PAGES TABLE
+-- ============================================
+-- Stores the page structure for each template
+
+CREATE TABLE IF NOT EXISTS public.template_pages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  template_id UUID NOT NULL REFERENCES public.templates(id) ON DELETE CASCADE,
+  page_number INT NOT NULL,
+  layout_id UUID REFERENCES public.layouts(id) ON DELETE SET NULL,
+  title VARCHAR(255),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(template_id, page_number)
+);
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_template_pages_template ON public.template_pages(template_id, page_number);
+
+-- Enable RLS
+ALTER TABLE public.template_pages ENABLE ROW LEVEL SECURITY;
+
+-- Everyone can view template pages for active templates
+DROP POLICY IF EXISTS "Anyone can view template pages" ON public.template_pages;
+CREATE POLICY "Anyone can view template pages"
+  ON public.template_pages FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM public.templates
+    WHERE templates.id = template_pages.template_id AND templates.is_active = TRUE
+  ));
+
+-- Admins can manage template pages
+DROP POLICY IF EXISTS "Admins can manage template pages" ON public.template_pages;
+CREATE POLICY "Admins can manage template pages"
+  ON public.template_pages FOR ALL
+  USING (EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  ));
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS on_template_page_updated ON public.template_pages;
+CREATE TRIGGER on_template_page_updated
+  BEFORE UPDATE ON public.template_pages
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_updated_at();
+
+-- ============================================
+-- SECTION 15: TEMPLATE ELEMENTS TABLE
+-- ============================================
+-- Stores pre-placed elements (text, decorations) on template pages
+
+CREATE TABLE IF NOT EXISTS public.template_elements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  template_page_id UUID NOT NULL REFERENCES public.template_pages(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL CHECK (type IN ('text', 'decoration')),
+
+  -- Text element fields
+  text_content TEXT,
+  font_family VARCHAR(100),
+  font_size INT,
+  font_color VARCHAR(20),
+  font_weight VARCHAR(20) DEFAULT 'normal',
+  font_style VARCHAR(20) DEFAULT 'normal',
+  text_align VARCHAR(20) DEFAULT 'left',
+
+  -- Positioning (percentages 0-100)
+  position_x FLOAT NOT NULL,
+  position_y FLOAT NOT NULL,
+  width FLOAT NOT NULL,
+  height FLOAT NOT NULL,
+  rotation FLOAT DEFAULT 0,
+  z_index INT DEFAULT 0,
+
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_template_elements_page ON public.template_elements(template_page_id);
+
+-- Enable RLS
+ALTER TABLE public.template_elements ENABLE ROW LEVEL SECURITY;
+
+-- Everyone can view template elements for active templates
+DROP POLICY IF EXISTS "Anyone can view template elements" ON public.template_elements;
+CREATE POLICY "Anyone can view template elements"
+  ON public.template_elements FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM public.template_pages tp
+    JOIN public.templates t ON t.id = tp.template_id
+    WHERE tp.id = template_elements.template_page_id AND t.is_active = TRUE
+  ));
+
+-- Admins can manage template elements
+DROP POLICY IF EXISTS "Admins can manage template elements" ON public.template_elements;
+CREATE POLICY "Admins can manage template elements"
+  ON public.template_elements FOR ALL
+  USING (EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  ));
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS on_template_element_updated ON public.template_elements;
+CREATE TRIGGER on_template_element_updated
+  BEFORE UPDATE ON public.template_elements
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_updated_at();
+
+-- ============================================
+-- SECTION 16: TEMPLATE ASSETS STORAGE BUCKET
+-- ============================================
+-- Public bucket for template thumbnails and preview images
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('template-assets', 'template-assets', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage policies for template-assets bucket
+DROP POLICY IF EXISTS "Anyone can view template assets" ON storage.objects;
+CREATE POLICY "Anyone can view template assets"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'template-assets');
+
+DROP POLICY IF EXISTS "Admins can upload template assets" ON storage.objects;
+CREATE POLICY "Admins can upload template assets"
+ON storage.objects FOR INSERT
+WITH CHECK (
+  bucket_id = 'template-assets'
+  AND EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  )
+);
+
+DROP POLICY IF EXISTS "Admins can update template assets" ON storage.objects;
+CREATE POLICY "Admins can update template assets"
+ON storage.objects FOR UPDATE
+USING (
+  bucket_id = 'template-assets'
+  AND EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  )
+);
+
+DROP POLICY IF EXISTS "Admins can delete template assets" ON storage.objects;
+CREATE POLICY "Admins can delete template assets"
+ON storage.objects FOR DELETE
+USING (
+  bucket_id = 'template-assets'
+  AND EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  )
+);
+
+-- ============================================
+-- SECTION 17: SEED SYSTEM LAYOUTS
+-- ============================================
+-- Migrate existing layouts from types/editor.ts LAYOUTS array
+
+-- Insert layouts (skip if already exists)
+INSERT INTO public.layouts (slug, name, description, is_system, sort_order) VALUES
+  ('blank', 'Blank', 'Empty page with no photo zones', true, 0),
+  ('single', 'Single', 'One large photo centered', true, 1),
+  ('double', 'Double', 'Two photos side by side', true, 2),
+  ('triple', 'Triple', 'One large photo with two smaller ones', true, 3),
+  ('grid-4', 'Grid 4', '2x2 grid of equal photos', true, 4),
+  ('grid-6', 'Grid 6', '2x3 grid of equal photos', true, 5)
+ON CONFLICT (slug) DO NOTHING;
+
+-- Insert layout zones for each layout
+-- Single layout (1 zone)
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 0, 10, 10, 80, 80 FROM public.layouts WHERE slug = 'single'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+
+-- Double layout (2 zones)
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 0, 5, 10, 42.5, 80 FROM public.layouts WHERE slug = 'double'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 1, 52.5, 10, 42.5, 80 FROM public.layouts WHERE slug = 'double'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+
+-- Triple layout (3 zones)
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 0, 5, 10, 60, 80 FROM public.layouts WHERE slug = 'triple'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 1, 70, 10, 25, 37.5 FROM public.layouts WHERE slug = 'triple'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 2, 70, 52.5, 25, 37.5 FROM public.layouts WHERE slug = 'triple'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+
+-- Grid 4 layout (4 zones)
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 0, 5, 5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 1, 52.5, 5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 2, 5, 52.5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 3, 52.5, 52.5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+
+-- Grid 6 layout (6 zones)
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 0, 5, 3, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 1, 52.5, 3, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 2, 5, 36, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 3, 52.5, 36, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 4, 5, 69, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
+SELECT id, 5, 52.5, 69, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+ON CONFLICT (layout_id, zone_index) DO NOTHING;
+
+-- ============================================
+-- SECTION 18: SEED TEMPLATE CATEGORIES
+-- ============================================
+-- Insert default template categories
+
+INSERT INTO public.template_categories (slug, name, description, icon, sort_order) VALUES
+  ('vacation', 'Vacation', 'Travel and adventure photobooks', 'Plane', 1),
+  ('wedding', 'Wedding', 'Wedding and engagement memories', 'Heart', 2),
+  ('baby', 'Baby & Family', 'Baby milestones and family moments', 'Baby', 3),
+  ('birthday', 'Birthday', 'Birthday celebrations', 'Cake', 4),
+  ('graduation', 'Graduation', 'Academic achievements', 'GraduationCap', 5),
+  ('portfolio', 'Portfolio', 'Professional portfolios', 'Briefcase', 6),
+  ('general', 'General', 'Multipurpose templates', 'Book', 7)
+ON CONFLICT (slug) DO NOTHING;

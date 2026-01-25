@@ -1,12 +1,34 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useEditor } from "@/lib/contexts/editor-context"
-import { LAYOUTS } from "@/types/editor"
-import { updatePage, createElement, deleteElement } from "@/lib/editor-actions"
-import { Check } from "lucide-react"
+import { LAYOUTS, type Layout } from "@/types/editor"
+import { updatePage, deleteElement } from "@/lib/editor-actions"
+import { getLayouts } from "@/lib/layout-actions"
+import { Check, Loader2 } from "lucide-react"
 
 export function LayoutsPanel() {
   const { state, dispatch, addElementToCanvas, getActivePage } = useEditor()
+  const [layouts, setLayouts] = useState<Layout[]>(LAYOUTS) // Start with static as fallback
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Fetch layouts from database
+  useEffect(() => {
+    async function fetchLayouts() {
+      try {
+        const dbLayouts = await getLayouts()
+        if (dbLayouts.length > 0) {
+          setLayouts(dbLayouts)
+        }
+      } catch (error) {
+        console.error("Failed to fetch layouts from database, using static fallback:", error)
+        // Keep using static LAYOUTS as fallback
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchLayouts()
+  }, [])
 
   const currentPage = getActivePage()
   const currentLayoutId = currentPage?.layout_id || "blank"
@@ -16,7 +38,7 @@ export function LayoutsPanel() {
 
     try {
       // Get the layout template
-      const layout = LAYOUTS.find(l => l.id === layoutId)
+      const layout = layouts.find(l => l.id === layoutId)
       if (!layout) return
 
       // Update the page's layout_id
@@ -58,8 +80,13 @@ export function LayoutsPanel() {
     <div className="p-4">
       <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-neutral)', fontFamily: 'var(--font-serif)' }}>Page Layouts</h3>
 
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-accent)' }} />
+        </div>
+      ) : (
       <div className="space-y-3">
-        {LAYOUTS.map((layout) => {
+        {layouts.map((layout) => {
           const isActive = currentLayoutId === layout.id
 
           return (
@@ -109,6 +136,7 @@ export function LayoutsPanel() {
           )
         })}
       </div>
+      )}
 
       <div className="mt-6 p-3 border rounded-lg" style={{ backgroundColor: 'var(--color-white)', borderColor: 'var(--color-accent)' }}>
         <p className="text-xs" style={{ color: 'var(--color-neutral)', fontFamily: 'var(--font-serif)' }}>

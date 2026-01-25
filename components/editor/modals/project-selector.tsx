@@ -2,9 +2,10 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { X, Plus, FileText, Clock, Trash2 } from "lucide-react"
+import { X, Plus, FileText, Clock, Trash2, Sparkles } from "lucide-react"
 import type { Project } from "@/types/editor"
 import { createProject, deleteProject } from "@/lib/editor-actions"
+import { TemplateBrowser } from "./template-browser"
 
 interface ProjectSelectorModalProps {
   projects: Project[]
@@ -35,6 +36,7 @@ export function ProjectSelectorModal({ projects }: ProjectSelectorModalProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [projectList, setProjectList] = useState(projects)
+  const [showTemplateBrowser, setShowTemplateBrowser] = useState(false)
 
   const handleCreateNew = async () => {
     try {
@@ -73,6 +75,16 @@ export function ProjectSelectorModal({ projects }: ProjectSelectorModalProps) {
     router.push("/")
   }
 
+  // Show template browser
+  if (showTemplateBrowser) {
+    return (
+      <TemplateBrowser
+        onBack={() => setShowTemplateBrowser(false)}
+        onClose={handleClose}
+      />
+    )
+  }
+
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-2xl w-full p-8 relative max-h-[80vh] flex flex-col">
@@ -97,16 +109,49 @@ export function ProjectSelectorModal({ projects }: ProjectSelectorModalProps) {
           </p>
         </div>
 
-        {/* Create New Project Button */}
-        <button
-          onClick={handleCreateNew}
-          disabled={isCreating}
-          className="w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white py-4 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2 mb-6"
-          style={{ fontFamily: "var(--font-serif)" }}
-        >
-          <Plus className="w-5 h-5" />
-          {isCreating ? "Creating..." : "Create New Project"}
-        </button>
+        {/* Create Options */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          {/* Blank Project Button */}
+          <button
+            onClick={handleCreateNew}
+            disabled={isCreating}
+            className="p-4 border-2 rounded-lg font-medium transition-all hover:border-[var(--color-accent)] hover:shadow-md disabled:opacity-50 flex flex-col items-center gap-3"
+            style={{ fontFamily: "var(--font-serif)", borderColor: "var(--color-border)" }}
+          >
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: "var(--color-background)" }}
+            >
+              <Plus className="w-6 h-6" style={{ color: "var(--color-accent)" }} />
+            </div>
+            <div className="text-center">
+              <span className="block" style={{ color: "var(--color-neutral)" }}>
+                {isCreating ? "Creating..." : "Blank Project"}
+              </span>
+              <span className="text-xs text-gray-500">Start from scratch</span>
+            </div>
+          </button>
+
+          {/* Use Template Button */}
+          <button
+            onClick={() => setShowTemplateBrowser(true)}
+            className="p-4 border-2 rounded-lg font-medium transition-all hover:border-[var(--color-accent)] hover:shadow-md flex flex-col items-center gap-3"
+            style={{ fontFamily: "var(--font-serif)", borderColor: "var(--color-border)" }}
+          >
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: "var(--color-background)" }}
+            >
+              <Sparkles className="w-6 h-6" style={{ color: "var(--color-accent)" }} />
+            </div>
+            <div className="text-center">
+              <span className="block" style={{ color: "var(--color-neutral)" }}>
+                Use Template
+              </span>
+              <span className="text-xs text-gray-500">Pre-designed layouts</span>
+            </div>
+          </button>
+        </div>
 
         {/* Divider */}
         {projectList.length > 0 && (

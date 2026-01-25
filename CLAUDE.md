@@ -39,6 +39,19 @@ KEEPERS is a custom photobook platform featuring a minimal landing page and a fu
 ```
 keepers/
 ├── app/
+│   ├── admin/                  # Admin panel (protected)
+│   │   ├── layout.tsx          # Admin shell with sidebar
+│   │   ├── page.tsx            # Admin dashboard
+│   │   ├── layouts/            # Layout management
+│   │   │   ├── page.tsx        # Layouts list
+│   │   │   ├── new/page.tsx    # Create layout
+│   │   │   └── [layoutId]/page.tsx  # Edit layout
+│   │   ├── templates/          # Template management
+│   │   │   ├── page.tsx        # Templates list
+│   │   │   ├── new/page.tsx    # Create template
+│   │   │   └── [templateId]/page.tsx  # Edit template
+│   │   └── categories/         # Category management
+│   │       └── page.tsx        # Categories list
 │   ├── api/
 │   │   └── auth/
 │   │       └── callback/
@@ -57,6 +70,18 @@ keepers/
 │   ├── page.tsx                # Main landing page (Server Component)
 │   └── globals.css             # Global styles
 ├── components/
+│   ├── admin/                  # Admin UI components
+│   │   ├── admin-sidebar.tsx   # Admin navigation sidebar
+│   │   ├── layouts/            # Layout admin components
+│   │   │   ├── layout-list.tsx # Layouts table
+│   │   │   ├── layout-form.tsx # Create/edit form
+│   │   │   └── zone-editor.tsx # Visual zone editor canvas
+│   │   ├── templates/          # Template admin components
+│   │   │   ├── template-list.tsx  # Templates grid
+│   │   │   ├── template-form.tsx  # Create/edit form
+│   │   │   └── page-builder.tsx   # Page ordering/layout assignment
+│   │   └── categories/
+│   │       └── category-list.tsx  # Inline category editor
 │   ├── auth-modal.tsx          # Authentication modal (Client)
 │   ├── header.tsx              # Navigation header (Client)
 │   ├── hero.tsx                # Hero section (Client)
@@ -71,15 +96,19 @@ keepers/
 │       ├── elements/           # Canvas element components
 │       │   └── zone-container.tsx  # Resizable layout zone container with photo rendering
 │       ├── modals/             # Modal components
-│       │   └── project-selector.tsx # Project selection modal
+│       │   ├── project-selector.tsx # Project selection modal
+│       │   └── template-browser.tsx # Template browser modal
 │       ├── ui/                 # Reusable UI components
 │       │   └── delete-button.tsx   # Reusable delete button
 │       └── panels/
 │           ├── photos-panel.tsx  # Photo upload and library panel
-│           └── layouts-panel.tsx # Layout selection panel
+│           └── layouts-panel.tsx # Layout selection panel (fetches from DB)
 ├── lib/
 │   ├── auth-actions.ts         # Server actions for authentication
 │   ├── editor-actions.ts       # Server actions for projects/pages/elements/zones
+│   ├── layout-actions.ts       # Server actions for layouts (public)
+│   ├── template-actions.ts     # Server actions for templates (public)
+│   ├── admin-actions.ts        # Server actions for admin CRUD operations
 │   ├── photo-upload-actions.ts # Server actions for photo uploads
 │   ├── load-project-photos.ts  # Load and refresh signed URLs for photos
 │   ├── config.ts               # Feature flags & configuration
@@ -93,9 +122,10 @@ keepers/
 ├── types/
 │   ├── auth.ts                 # TypeScript auth type definitions
 │   ├── waitlist.ts             # Waitlist type definitions
-│   └── editor.ts               # Editor type definitions (Project, Page, PageZone, Element, Layout)
+│   ├── editor.ts               # Editor type definitions (Project, Page, PageZone, Element, Layout)
+│   └── template.ts             # Template system type definitions
 ├── sql/
-│   ├── setup.sql               # Complete consolidated database schema
+│   ├── setup.sql               # Complete consolidated database schema (includes templates)
 │   ├── storage-setup.md        # Storage bucket setup guide
 │   └── README.md               # Database setup instructions
 ├── scripts/
@@ -236,6 +266,14 @@ pnpm start
   - Photo upload with Supabase Storage
   - Project management (create, save, delete)
   - Real-time element positioning and resizing
+- **Template system**
+  - Pre-designed templates (vacation, wedding, baby, etc.)
+  - Template browser with category filtering
+  - Create projects from templates with preset pages/layouts
+- **Admin panel** (`/admin`)
+  - Visual zone editor for creating layouts
+  - Template management with page builder
+  - Category management
 
 ---
 
@@ -870,5 +908,184 @@ The editor reducer uses O(1) page-indexed lookups for element and zone updates:
 
 ---
 
-**Project Version**: 7.2.0 (Security & Performance Refactoring)
+## Template System
+
+### Overview
+
+KEEPERS includes a database-backed template system that allows users to create projects from pre-designed templates. Admins can create and manage layouts, templates, and categories through a dedicated admin UI.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  User Flow                                                       │
+├─────────────────────────────────────────────────────────────────┤
+│  1. User clicks "Start Your Book"                                │
+│  2. Project Selector shows: "Blank Project" or "Use Template"   │
+│  3. Template Browser displays categories and templates           │
+│  4. User selects template → Project created with preset pages   │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Admin Flow (/admin)                                             │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Admin creates layouts with visual zone editor               │
+│  2. Admin creates templates, assigns layouts to pages           │
+│  3. Admin manages categories for template organization          │
+│  4. Templates become available to users in Template Browser     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Database Schema
+
+**Layouts** (`public.layouts`)
+- `id` (UUID) - Primary key
+- `slug` (VARCHAR) - Unique identifier (e.g., 'single', 'grid-4')
+- `name` (VARCHAR) - Display name
+- `description` (TEXT) - Layout description
+- `icon` (VARCHAR) - Lucide icon name
+- `thumbnail_url` (TEXT) - Preview image
+- `is_system` (BOOLEAN) - System layouts can't be deleted
+- `is_active` (BOOLEAN) - Visibility to users
+- `sort_order` (INT) - Display order
+
+**Layout Zones** (`public.layout_zones`)
+- `id` (UUID) - Primary key
+- `layout_id` (UUID) - Parent layout
+- `zone_index` (INT) - Zone order
+- `position_x`, `position_y` (FLOAT) - Position as percentage (0-100)
+- `width`, `height` (FLOAT) - Size as percentage (0-100)
+
+**Template Categories** (`public.template_categories`)
+- `id` (UUID) - Primary key
+- `slug` (VARCHAR) - Unique identifier
+- `name` (VARCHAR) - Display name
+- `description` (TEXT) - Category description
+- `icon` (VARCHAR) - Lucide icon name
+- `sort_order` (INT) - Display order
+- `is_active` (BOOLEAN) - Visibility
+
+**Templates** (`public.templates`)
+- `id` (UUID) - Primary key
+- `slug` (VARCHAR) - Unique identifier
+- `name` (VARCHAR) - Template name
+- `description` (TEXT) - Template description
+- `category_id` (UUID) - Parent category
+- `thumbnail_url` (TEXT) - Preview image
+- `preview_images` (JSONB) - Additional preview images
+- `page_count` (INT) - Number of pages
+- `is_featured` (BOOLEAN) - Show in featured section
+- `is_premium` (BOOLEAN) - Future: paid templates
+- `is_active` (BOOLEAN) - Visibility
+
+**Template Pages** (`public.template_pages`)
+- `id` (UUID) - Primary key
+- `template_id` (UUID) - Parent template
+- `page_number` (INT) - Page order
+- `layout_id` (UUID) - Layout for this page
+- `title` (VARCHAR) - Optional page title
+
+**Template Elements** (`public.template_elements`)
+- Pre-placed text/decoration elements on template pages
+- Same positioning fields as regular elements
+
+### Server Actions
+
+**Layout Actions** ([lib/layout-actions.ts](lib/layout-actions.ts)):
+- `getLayouts()` - Get all active layouts (for editor)
+- `getLayoutBySlug(slug)` - Get single layout
+- `getLayoutsDB()` - Get all layouts as DB records (for admin)
+
+**Template Actions** ([lib/template-actions.ts](lib/template-actions.ts)):
+- `getTemplateCategories()` - Get all active categories
+- `getTemplates(categorySlug?)` - Get templates with optional filter
+- `getFeaturedTemplates()` - Get featured templates
+- `getTemplate(templateId)` - Get full template with pages
+- `createProjectFromTemplate(templateId, title?)` - Create project from template
+
+**Admin Actions** ([lib/admin-actions.ts](lib/admin-actions.ts)):
+- `isAdmin()` - Check if current user is admin
+- `getAdminProfile()` - Get admin profile
+- `createLayout(input)` / `updateLayout(id, input)` / `deleteLayout(id)`
+- `createTemplate(input)` / `updateTemplate(id, input)` / `deleteTemplate(id)`
+- `createCategory(input)` / `updateCategory(id, input)` / `deleteCategory(id)`
+- `addTemplatePage()` / `updateTemplatePage()` / `deleteTemplatePage()`
+
+### Pre-seeded Data
+
+**System Layouts** (migrated from static TypeScript):
+- `blank` - Empty page with no zones
+- `single` - One large centered photo
+- `double` - Two photos side by side
+- `triple` - One large + two smaller photos
+- `grid-4` - 2x2 grid
+- `grid-6` - 2x3 grid
+
+**Default Categories**:
+- Vacation, Wedding, Baby & Family, Birthday, Graduation, Portfolio, General
+
+### Storage
+
+**Bucket**: `template-assets` (public)
+- Stores template thumbnails and preview images
+- Admin-only upload access
+- Public read access
+
+---
+
+## Admin UI
+
+### Overview
+
+The admin panel at `/admin` provides a UI for managing layouts, templates, and categories. Access is restricted to users with `is_admin = true` in their profile.
+
+### Routes
+
+| Route | Description |
+|-------|-------------|
+| `/admin` | Dashboard with stats and quick actions |
+| `/admin/layouts` | List all layouts |
+| `/admin/layouts/new` | Create new layout with zone editor |
+| `/admin/layouts/[id]` | Edit existing layout |
+| `/admin/templates` | List all templates |
+| `/admin/templates/new` | Create new template with page builder |
+| `/admin/templates/[id]` | Edit existing template |
+| `/admin/categories` | Manage template categories |
+
+### Key Components
+
+| Component | Description |
+|-----------|-------------|
+| `AdminSidebar` | Navigation sidebar with links to all sections |
+| `ZoneEditor` | Visual canvas for creating/editing layout zones |
+| `PageBuilder` | Drag-drop interface for ordering template pages |
+| `LayoutList` | Table view of layouts with actions |
+| `TemplateList` | Grid view of templates with thumbnails |
+| `CategoryList` | Inline editable category table |
+
+### Zone Editor Features
+
+- **Visual canvas** representing a page (8.5:11 aspect ratio)
+- **Click and drag** to draw new zones
+- **Select zones** to move or resize
+- **Resize handles** on selected zones
+- **Percentage-based** positioning (0-100)
+- **Form inputs** for precise value editing
+
+### Setting Up Admin Access
+
+1. Run the SQL migration in Supabase (includes `is_admin` column)
+2. Find your user ID in Supabase Dashboard → Authentication → Users
+3. Run SQL: `UPDATE profiles SET is_admin = true WHERE id = 'your-user-id'`
+4. Access `/admin` while logged in
+
+### Security
+
+- **Route Protection**: Admin layout checks `getAdminProfile()` and redirects non-admins
+- **RLS Policies**: All admin tables have policies checking `profiles.is_admin`
+- **Server Actions**: All admin actions call `isAdmin()` before operations
+
+---
+
+**Project Version**: 8.0.0 (Template System & Admin UI)
 **Framework**: Next.js 16.0.10 + React 19.2.0 + Supabase 2.89.0
