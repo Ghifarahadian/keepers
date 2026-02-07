@@ -14,6 +14,8 @@ import type {
   CreateTemplateInput,
   UpdateTemplateInput,
 } from "@/types/template"
+import type { Voucher } from "@/types/voucher"
+import type { PageCount, PaperSize } from "@/types/editor"
 
 // ============================================
 // ADMIN AUTH ACTIONS
@@ -374,7 +376,7 @@ export async function getAdminTemplates(): Promise<Template[]> {
 /**
  * Get a single template with pages for admin
  */
-export async function getAdminTemplate(templateId: string): Promise<Template | null> {
+export async function  getAdminTemplate(templateId: string): Promise<Template | null> {
   const supabase = await createClient()
 
   if (!(await isAdmin())) {
@@ -667,4 +669,134 @@ export async function reorderTemplatePages(
   }
 
   revalidatePath(`/admin/templates/${templateId}`)
+}
+
+// ============================================
+// VOUCHER ADMIN ACTIONS
+// ============================================
+
+/**
+ * Get all vouchers for admin with optional filtering
+ */
+export async function getVouchers(filters?: {
+  status?: string
+}): Promise<Voucher[]> {
+  const supabase = await createClient()
+
+  if (!(await isAdmin())) {
+    throw new Error("Unauthorized")
+  }
+
+  let query = supabase
+    .from("vouchers")
+    .select("*")
+    .order("created_at", { ascending: false })
+
+  // Apply status filter if provided
+  if (filters?.status) {
+    query = query.eq("status", filters.status)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error("Error fetching vouchers:", error)
+    return []
+  }
+
+  return data as Voucher[]
+}
+
+/**
+ * Create a new voucher
+ */
+export async function createVoucher(input: {
+  code: string
+  page_count: PageCount
+  paper_size: PaperSize
+}): Promise<Voucher> {
+  const supabase = await createClient()
+
+  if (!(await isAdmin())) {
+    throw new Error("Unauthorized")
+  }
+
+  // Normalize voucher code (uppercase, trim)
+  const normalizedCode = input.code.trim().toUpperCase()
+
+  if (!normalizedCode) {
+    throw new Error("Voucher code is required")
+  }
+
+  // Check if code already exists
+  const { data: existing } = await supabase
+    .from("vouchers")
+    .select("id")
+    .eq("code", normalizedCode)
+    .single()
+
+  if (existing) {
+    throw new Error("A voucher with this code already exists")
+  }
+
+  // Create voucher
+  const { data, error } = await supabase
+    .from("vouchers")
+    .insert({
+      code: normalizedCode,
+      page_count: input.page_count,
+      paper_size: input.paper_size,
+      status: 'not_redeemed',
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error("Error creating voucher:", error)
+    throw new Error("Failed to create voucher")
+  }
+
+  revalidatePath("/admin/vouchers")
+
+  return data as Voucher
+}
+
+/**
+ * Delete a voucher
+ * Only allows deletion of not_redeemed vouchers
+ */
+export async function deleteVoucher(id: string): Promise<void> {
+  const supabase = await createClient()
+
+  if (!(await isAdmin())) {
+    throw new Error("Unauthorized")
+  }
+
+  // Check if voucher can be deleted (only not_redeemed)
+  const { data: voucher } = await supabase
+    .from("vouchers")
+    .select("status")
+    .eq("id", id)
+    .single()
+
+  if (!voucher) {
+    throw new Error("Voucher not found")
+  }
+
+  if (voucher.status !== 'not_redeemed') {
+    throw new Error("Cannot delete a voucher that has been used or is in use")
+  }
+
+  // Delete voucher
+  const { error } = await supabase
+    .from("vouchers")
+    .delete()
+    .eq("id", id)
+
+  if (error) {
+    console.error("Error deleting voucher:", error)
+    throw new Error("Failed to delete voucher")
+  }
+
+  revalidatePath("/admin/vouchers")
 }

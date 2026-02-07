@@ -1,6 +1,6 @@
 "use client"
 
-import { Undo, Redo, Eye } from "lucide-react"
+import { Undo, Redo } from "lucide-react"
 
 export function EditorBottomBar() {
   // Undo/Redo functionality will be implemented later
@@ -8,8 +8,8 @@ export function EditorBottomBar() {
   const canRedo = false
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 h-14 border-t flex items-center justify-between px-6 z-50" style={{ backgroundColor: 'var(--color-white)', borderColor: 'var(--color-border)' }}>
-      {/* Left: Undo/Redo */}
+    <footer className="fixed bottom-0 left-0 right-0 h-14 border-t flex items-center px-6 z-50" style={{ backgroundColor: 'var(--color-white)', borderColor: 'var(--color-border)' }}>
+      {/* Undo/Redo */}
       <div className="flex items-center gap-2">
         <button
           disabled={!canUndo}
@@ -37,20 +37,6 @@ export function EditorBottomBar() {
           <span className="text-sm font-medium">Redo</span>
         </button>
       </div>
-
-      {/* Right: Preview */}
-      <button
-        className="flex items-center gap-2 px-6 py-2 rounded-lg transition-colors font-medium"
-        style={{
-          backgroundColor: 'var(--color-neutral)',
-          color: 'var(--color-white)',
-          fontFamily: 'var(--font-serif)'
-        }}
-        title="Preview photobook"
-      >
-        <Eye className="w-4 h-4" />
-        <span>Preview</span>
-      </button>
     </footer>
   )
 }

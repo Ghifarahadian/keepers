@@ -59,8 +59,8 @@ export function PageBuilder({ pages, layouts, onChange, disabled }: PageBuilderP
               top: `${zone.position_y}%`,
               width: `${zone.width}%`,
               height: `${zone.height}%`,
-              backgroundColor: "var(--color-secondary)",
-              opacity: 0.5,
+              backgroundColor: zone.zone_type === "text" ? "var(--color-accent)" : "var(--color-secondary)",
+              opacity: 0.6,
             }}
           />
         ))}

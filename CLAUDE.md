@@ -50,8 +50,11 @@ keepers/
 │   │   │   ├── page.tsx        # Templates list
 │   │   │   ├── new/page.tsx    # Create template
 │   │   │   └── [templateId]/page.tsx  # Edit template
-│   │   └── categories/         # Category management
-│   │       └── page.tsx        # Categories list
+│   │   ├── categories/         # Category management
+│   │   │   └── page.tsx        # Categories list
+│   │   └── vouchers/           # Voucher management
+│   │       ├── page.tsx        # Vouchers list with stats
+│   │       └── new/page.tsx    # Create voucher
 │   ├── api/
 │   │   └── auth/
 │   │       └── callback/
@@ -63,9 +66,16 @@ keepers/
 │   ├── editor/
 │   │   ├── [projectId]/
 │   │   │   ├── page.tsx        # Project editor page (Server Component)
-│   │   │   └── loading.tsx     # Loading state
+│   │   │   ├── loading.tsx     # Loading state
+│   │   │   └── preview/        # Preview and order confirmation
+│   │   │       ├── page.tsx    # Preview page (Server Component)
+│   │   │       └── loading.tsx # Loading state
 │   │   └── new/
 │   │       └── page.tsx        # New project / project selector
+│   ├── profile/                # User profile management
+│   │   ├── page.tsx            # Profile page (Server Component)
+│   │   ├── profile-client.tsx  # Profile form (Client Component)
+│   │   └── loading.tsx         # Loading state
 │   ├── layout.tsx              # Root layout with metadata
 │   ├── page.tsx                # Main landing page (Server Component)
 │   └── globals.css             # Global styles
@@ -80,8 +90,11 @@ keepers/
 │   │   │   ├── template-list.tsx  # Templates grid
 │   │   │   ├── template-form.tsx  # Create/edit form
 │   │   │   └── page-builder.tsx   # Page ordering/layout assignment
-│   │   └── categories/
-│   │       └── category-list.tsx  # Inline category editor
+│   │   ├── categories/
+│   │   │   └── category-list.tsx  # Inline category editor
+│   │   └── vouchers/           # Voucher admin components
+│   │       ├── voucher-list.tsx   # Vouchers table with status
+│   │       └── voucher-form.tsx   # Create/edit voucher form
 │   ├── auth-modal.tsx          # Authentication modal (Client)
 │   ├── header.tsx              # Navigation header (Client)
 │   ├── hero.tsx                # Hero section (Client)
@@ -98,6 +111,9 @@ keepers/
 │       ├── modals/             # Modal components
 │       │   ├── project-selector.tsx # Project selection modal
 │       │   └── template-browser.tsx # Template browser modal
+│       ├── preview/            # Preview and order components
+│       │   ├── preview-content.tsx  # Main preview/order page
+│       │   └── success-modal.tsx    # Order confirmation modal
 │       ├── ui/                 # Reusable UI components
 │       │   └── delete-button.tsx   # Reusable delete button
 │       └── panels/
@@ -109,12 +125,16 @@ keepers/
 │   ├── layout-actions.ts       # Server actions for layouts (public)
 │   ├── template-actions.ts     # Server actions for templates (public)
 │   ├── admin-actions.ts        # Server actions for admin CRUD operations
+│   ├── voucher-actions.ts      # Server actions for voucher validation and redemption
 │   ├── photo-upload-actions.ts # Server actions for photo uploads
 │   ├── load-project-photos.ts  # Load and refresh signed URLs for photos
 │   ├── config.ts               # Feature flags & configuration
 │   ├── validation.ts           # Input validation utilities
 │   ├── contexts/
 │   │   └── editor-context.tsx  # Editor state management (React Context + Reducer)
+│   ├── email/
+│   │   ├── send-waitlist-welcome.ts      # Waitlist welcome email sender
+│   │   └── send-order-confirmation.ts    # Order confirmation email sender
 │   └── supabase/
 │       ├── client.ts           # Browser Supabase client
 │       ├── server.ts           # Server Supabase client
@@ -123,7 +143,8 @@ keepers/
 │   ├── auth.ts                 # TypeScript auth type definitions
 │   ├── waitlist.ts             # Waitlist type definitions
 │   ├── editor.ts               # Editor type definitions (Project, Page, PageZone, Element, Layout)
-│   └── template.ts             # Template system type definitions
+│   ├── template.ts             # Template system type definitions
+│   └── voucher.ts              # Voucher type definitions
 ├── sql/
 │   ├── setup.sql               # Complete consolidated database schema (includes templates)
 │   ├── storage-setup.md        # Storage bucket setup guide
@@ -138,6 +159,7 @@ keepers/
 │   ├── reset-password.html     # Password reset template
 │   ├── change-email.html       # Email change confirmation template
 │   ├── waitlist-welcome.html   # Waitlist welcome email template
+│   ├── order-confirmation.html # Order confirmation email template
 │   └── README.md               # Email template documentation
 ├── docs/                       # Documentation
 │   ├── resend-smtp-setup.md    # Resend SMTP configuration guide
@@ -255,10 +277,10 @@ pnpm start
   - Email/password signup and login
   - Session management with automatic refresh
   - Row Level Security (RLS) for data protection
-- User profile management (first name, last name)
-- Toggleable "Coming Soon" mode
-- Environment-based configuration
-- Server-side rendering with Next.js App Router
+- **User profile management**
+  - Personal information (first name, last name)
+  - Delivery information (address, postal code, phone number)
+  - Profile page at `/profile` for editing details
 - **Full-featured photobook editor**
   - Drag-and-drop photo placement
   - Customizable layout zones (resizable and repositionable)
@@ -266,14 +288,26 @@ pnpm start
   - Photo upload with Supabase Storage
   - Project management (create, save, delete)
   - Real-time element positioning and resizing
+  - Product configuration (page count: 30/40, paper size: A4/A5)
 - **Template system**
   - Pre-designed templates (vacation, wedding, baby, etc.)
   - Template browser with category filtering
   - Create projects from templates with preset pages/layouts
+- **Voucher & order management system**
+  - Pre-generated voucher codes with product configuration
+  - Three-state voucher lifecycle (not_redeemed, being_redeemed, fully_redeemed)
+  - Voucher validation during project creation
+  - Preview and order confirmation page
+  - Automatic order confirmation emails
+  - Admin voucher management dashboard
 - **Admin panel** (`/admin`)
   - Visual zone editor for creating layouts
   - Template management with page builder
   - Category management
+  - Voucher code generation and tracking
+- Toggleable "Coming Soon" mode
+- Environment-based configuration
+- Server-side rendering with Next.js App Router
 
 ---
 
@@ -320,9 +354,10 @@ KEEPERS uses **Supabase Auth** for user authentication and session management. T
 - `auth.users` - Core authentication data (email, password hash, metadata)
 
 **Custom Tables:**
-- `public.profiles` - Extended user information (first_name, last_name)
+- `public.profiles` - Extended user information (first_name, last_name, address, postal_code, phone_number, is_admin)
   - Automatically created via trigger on user signup
   - Protected by Row Level Security (RLS)
+  - Includes delivery information for orders
 
 See [sql/setup.sql](sql/setup.sql) for complete schema.
 
@@ -438,6 +473,7 @@ All email templates share consistent branding:
 | **Password Reset** | [reset-password.html](email_templates/reset-password.html) | Forgot password flow |
 | **Email Change** | [change-email.html](email_templates/change-email.html) | Confirm new email address |
 | **Waitlist Welcome** | [waitlist-welcome.html](email_templates/waitlist-welcome.html) | Waitlist signup (auto-sent via Resend) |
+| **Order Confirmation** | [order-confirmation.html](email_templates/order-confirmation.html) | Order confirmation after voucher redemption (auto-sent) |
 
 ### Supabase Email Setup
 
@@ -466,6 +502,22 @@ The waitlist welcome email is **automatically sent** when users sign up on the `
 - **How it works:** Code reads HTML template, replaces `{{EMAIL}}` and `{{UNSUBSCRIBE_URL}}` variables, sends via Resend API
 - **To customize:** Edit the HTML file directly, restart server
 
+### Order Confirmation Email Integration
+
+The order confirmation email is **automatically sent** when users successfully redeem a voucher:
+
+- **Template File:** [email_templates/order-confirmation.html](email_templates/order-confirmation.html)
+- **Sender Code:** [lib/email/send-order-confirmation.ts](lib/email/send-order-confirmation.ts)
+- **Trigger:** Called by `redeemVoucher()` in [lib/voucher-actions.ts](lib/voucher-actions.ts)
+- **How it works:** Code reads HTML template, replaces variables (`{{CUSTOMER_NAME}}`, `{{PROJECT_TITLE}}`, `{{PAGE_COUNT}}`, `{{ORDER_DATE}}`, `{{VOUCHER_CODE}}`, `{{ADDRESS}}`, `{{POSTAL_CODE}}`, `{{PHONE_NUMBER}}`, `{{EMAIL}}`), sends via Resend API
+- **Template Variables:**
+  - Customer information from user profile
+  - Project details (title, page count)
+  - Order details (voucher code, order date)
+  - Delivery information (address, postal code, phone number)
+- **To customize:** Edit the HTML file directly, restart server
+- **Error Handling:** Email failures are logged but don't prevent voucher redemption
+
 ### Template Customization
 
 All templates use inline styles (required for email clients). To modify:
@@ -473,7 +525,7 @@ All templates use inline styles (required for email clients). To modify:
 1. **Edit HTML directly:** Open any `.html` file in [email_templates/](email_templates/)
 2. **Update inline styles:** Change colors, fonts, spacing as needed
 3. **For Supabase templates:** Copy updated HTML and paste into Supabase
-4. **For waitlist template:** Just restart your server
+4. **For auto-sent templates** (waitlist, order confirmation): Just restart your server
 
 See [email_templates/README.md](email_templates/README.md) for detailed customization guide.
 
@@ -539,12 +591,18 @@ vercel --prod
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
+RESEND_API_KEY=re_your_resend_api_key
+RESEND_FROM_EMAIL=noreply@yourdomain.com
 ```
 
 ### Optional
 ```env
 NEXT_PUBLIC_COMING_SOON_MODE=false
 ```
+
+**Notes:**
+- `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are required for sending emails (waitlist welcome, order confirmation)
+- See [docs/resend-smtp-setup.md](docs/resend-smtp-setup.md) for Resend setup instructions
 
 See [.env.local.example](.env.local.example) for complete reference.
 
@@ -669,6 +727,9 @@ KEEPERS includes a full-featured photobook editor that allows authenticated user
 - `title` (VARCHAR) - Project name
 - `cover_photo_url` (TEXT) - Cover image URL
 - `status` (VARCHAR) - draft, completed, archived
+- `page_count` (INT) - Number of pages (30 or 40)
+- `paper_size` (VARCHAR) - Paper size (A4, A5, or PDF Only)
+- `voucher_code` (VARCHAR) - Associated voucher code (nullable)
 - `last_edited_at` (TIMESTAMPTZ) - Last modification time
 - `created_at`, `updated_at` (TIMESTAMPTZ)
 
@@ -1051,6 +1112,8 @@ The admin panel at `/admin` provides a UI for managing layouts, templates, and c
 | `/admin/templates/new` | Create new template with page builder |
 | `/admin/templates/[id]` | Edit existing template |
 | `/admin/categories` | Manage template categories |
+| `/admin/vouchers` | List all vouchers with status stats |
+| `/admin/vouchers/new` | Create new voucher codes |
 
 ### Key Components
 
@@ -1062,6 +1125,8 @@ The admin panel at `/admin` provides a UI for managing layouts, templates, and c
 | `LayoutList` | Table view of layouts with actions |
 | `TemplateList` | Grid view of templates with thumbnails |
 | `CategoryList` | Inline editable category table |
+| `VoucherList` | Table view of vouchers with status indicators |
+| `VoucherForm` | Create voucher form with product configuration |
 
 ### Zone Editor Features
 
@@ -1087,5 +1152,216 @@ The admin panel at `/admin` provides a UI for managing layouts, templates, and c
 
 ---
 
-**Project Version**: 8.0.0 (Template System & Admin UI)
+## Voucher System
+
+### Overview
+
+KEEPERS includes a complete voucher system for managing photobook orders. Vouchers are pre-generated codes that allow customers to redeem physical photobooks with specific configurations (page count and paper size).
+
+### Voucher States
+
+Vouchers have three states that track their lifecycle:
+
+| Status | Description | User Action |
+|--------|-------------|-------------|
+| `not_redeemed` | Voucher is available and unused | Can be validated and applied to projects |
+| `being_redeemed` | Voucher is linked to a draft project | Project is in progress, not yet confirmed |
+| `fully_redeemed` | Voucher has been used for a completed order | Cannot be reused |
+
+### Workflow
+
+**1. Voucher Creation (Admin):**
+- Admin creates vouchers at `/admin/vouchers/new`
+- Each voucher has a unique code (auto-generated or custom)
+- Voucher specifies product configuration:
+  - Page count: 30 or 40 pages
+  - Paper size: A4, A5, or PDF Only
+
+**2. Project Creation with Voucher (User):**
+- User creates a new project at `/editor/new`
+- User can optionally enter a voucher code
+- System validates voucher:
+  - Checks if voucher exists and is `not_redeemed`
+  - Verifies voucher has valid product configuration
+- If valid:
+  - Project is created with voucher's page count and paper size
+  - Voucher status changes to `being_redeemed`
+  - Voucher is linked to project via `voucher_code` field
+
+**3. Draft Project Deletion:**
+- If user deletes a draft project with an applied voucher
+- Voucher is reverted to `not_redeemed` status
+- Voucher becomes available for reuse
+- Uses `revertVoucher()` server action
+
+**4. Order Confirmation (User):**
+- User finishes editing their photobook
+- User navigates to `/editor/[projectId]/preview`
+- Preview page shows:
+  - Project preview (placeholder)
+  - Delivery information (from user profile)
+  - Order details (page count, paper size)
+  - Voucher code (pre-filled if applied during creation)
+- User confirms order by clicking "Confirm Order"
+- System processes redemption:
+  - Validates voucher matches project configuration
+  - Changes voucher status to `fully_redeemed`
+  - Updates project status to `completed`
+  - Sends order confirmation email
+- Success modal shows confirmation message
+- User is redirected to home page after 5 seconds
+
+### Database Schema
+
+**Vouchers** (`public.vouchers`)
+- `id` (UUID) - Primary key
+- `code` (VARCHAR) - Unique voucher code (uppercase)
+- `status` (VARCHAR) - Voucher state: `not_redeemed`, `being_redeemed`, `fully_redeemed`
+- `page_count` (INT) - Number of pages (30 or 40)
+- `paper_size` (VARCHAR) - Paper size (A4, A5, or PDF Only)
+- `project_id` (UUID) - Linked project (nullable)
+- `redeemed_by` (UUID) - User who redeemed (nullable)
+- `redeemed_at` (TIMESTAMPTZ) - Redemption timestamp (nullable)
+- `created_at` (TIMESTAMPTZ) - Creation timestamp
+
+### Server Actions
+
+**Voucher Actions** ([lib/voucher-actions.ts](lib/voucher-actions.ts)):
+- `validateVoucherCode(code)` - Validate voucher and return configuration
+- `applyVoucherToProject(voucherCode, projectId)` - Apply voucher during project creation (sets status to `being_redeemed`)
+- `redeemVoucher(voucherCode, projectId)` - Redeem voucher and complete order (sets status to `fully_redeemed`)
+- `revertVoucher(voucherCode)` - Revert voucher when draft project is deleted (sets status back to `not_redeemed`)
+
+**Admin Actions** ([lib/admin-actions.ts](lib/admin-actions.ts)):
+- `createVoucher(input)` - Create new voucher with code and configuration
+- `getVouchers()` - Get all vouchers for admin dashboard
+- `deleteVoucher(id)` - Delete voucher (only if `not_redeemed`)
+
+### Routes
+
+| Route | Description |
+|-------|-------------|
+| `/editor/new` | Project creation with optional voucher validation |
+| `/editor/[projectId]/preview` | Preview and order confirmation page |
+| `/admin/vouchers` | Admin voucher management dashboard |
+| `/admin/vouchers/new` | Create new voucher |
+
+### Components
+
+| Component | Description |
+|-----------|-------------|
+| `PreviewContent` | Main preview/order page with delivery info and voucher redemption form |
+| `SuccessModal` | Order confirmation modal with auto-redirect |
+| `VoucherList` | Admin table of all vouchers with status filtering |
+| `VoucherForm` | Admin form for creating vouchers |
+
+### Email Integration
+
+When a voucher is successfully redeemed:
+- Order confirmation email is sent to the user
+- Email includes:
+  - Customer name and delivery address
+  - Project title and page count
+  - Voucher code
+  - Order date
+  - Next steps and processing time (up to 2 weeks)
+- Template: [email_templates/order-confirmation.html](email_templates/order-confirmation.html)
+- Sender: [lib/email/send-order-confirmation.ts](lib/email/send-order-confirmation.ts)
+
+### Security
+
+- **Voucher codes normalized:** Uppercase and trimmed before validation
+- **Unique constraint:** Database ensures no duplicate voucher codes
+- **RLS policies:** Users can only redeem vouchers for their own projects
+- **Validation checks:**
+  - Voucher must exist and be available
+  - Voucher configuration must match project (page count and paper size)
+  - Project must belong to authenticated user
+- **Admin-only creation:** Only admins can create/delete vouchers
+
+---
+
+## User Profile & Delivery Information
+
+### Overview
+
+KEEPERS includes a user profile page at `/profile` where users can manage their personal information and delivery details required for photobook orders.
+
+### Profile Fields
+
+**Required Fields:**
+- `first_name` (VARCHAR) - First name
+- `last_name` (VARCHAR) - Last name
+- `email` (VARCHAR) - Email address (read-only, managed by Supabase Auth)
+
+**Optional Delivery Fields:**
+- `address` (TEXT) - Full delivery address
+- `postal_code` (VARCHAR) - Postal/ZIP code
+- `phone_number` (VARCHAR) - Contact phone number
+
+### Routes
+
+| Route | Description |
+|-------|-------------|
+| `/profile` | User profile management page |
+
+### Components
+
+| Component | File | Description |
+|-----------|------|-------------|
+| ProfilePage | [app/profile/page.tsx](app/profile/page.tsx) | Server component that fetches user data |
+| ProfileClient | [app/profile/profile-client.tsx](app/profile/profile-client.tsx) | Client component with editable form |
+
+### Server Actions
+
+**Profile Actions** ([lib/auth-actions.ts](lib/auth-actions.ts)):
+- `getUserProfile()` - Fetch current user profile with all fields
+- `updateProfile(data)` - Update profile information (validates required fields)
+
+### Database Schema
+
+**Profiles** (`public.profiles`)
+- `id` (UUID) - Primary key, references auth.users
+- `first_name` (VARCHAR) - Required
+- `last_name` (VARCHAR) - Required
+- `email` (VARCHAR) - Synced from auth.users
+- `address` (TEXT) - Nullable
+- `postal_code` (VARCHAR) - Nullable
+- `phone_number` (VARCHAR) - Nullable
+- `is_admin` (BOOLEAN) - Admin access flag
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+
+### Integration with Orders
+
+The profile information is used during the order confirmation process:
+
+1. **Preview Page** ([app/editor/[projectId]/preview/page.tsx](app/editor/[projectId]/preview/page.tsx)):
+   - Displays user's delivery information
+   - Shows link to update profile if information is incomplete
+   - Validates required fields before order confirmation
+
+2. **Order Confirmation Email**:
+   - Includes delivery address from profile
+   - Shows customer name, postal code, and phone number
+   - Email is sent to user's email address
+
+### User Experience
+
+- **Profile Link:** Accessible from user menu in header (Profile option)
+- **Update from Preview:** "Update your information" link on preview page
+- **Auto-save:** Changes saved immediately on form submission
+- **Success Feedback:** Green success message appears for 3 seconds after save
+- **Error Handling:** Red error messages for validation failures
+- **Back Navigation:** Back button returns to previous page
+
+### Security
+
+- **Authentication Required:** Profile page redirects unauthenticated users to home
+- **RLS Policies:** Users can only view/edit their own profile
+- **Server-side Validation:** All updates validated on server before saving
+- **Email Protection:** Email field is read-only (managed by Supabase Auth)
+
+---
+
+**Project Version**: 9.0.0 (Voucher System & Order Management)
 **Framework**: Next.js 16.0.10 + React 19.2.0 + Supabase 2.89.0

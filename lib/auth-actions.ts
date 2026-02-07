@@ -108,6 +108,9 @@ export async function getUserProfile() {
     email: user.email,
     firstName: profile?.first_name || "",
     lastName: profile?.last_name || "",
+    address: profile?.address || null,
+    postalCode: profile?.postal_code || null,
+    phoneNumber: profile?.phone_number || null,
   };
 }
 
@@ -162,6 +165,47 @@ export async function deleteAccount() {
 
   // 4. Sign out and redirect
   await signOut();
+
+  return { success: true };
+}
+
+export async function updateProfile(input: {
+  firstName: string;
+  lastName: string;
+  address?: string;
+  postalCode?: string;
+  phoneNumber?: string;
+}) {
+  const supabase = await createClient();
+
+  // 1. Get authenticated user
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (!user || userError) {
+    return { error: "Not authenticated" };
+  }
+
+  // 2. Update profile
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .update({
+      first_name: input.firstName,
+      last_name: input.lastName,
+      address: input.address || null,
+      postal_code: input.postalCode || null,
+      phone_number: input.phoneNumber || null,
+    })
+    .eq("id", user.id);
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  // 3. Revalidate path
+  revalidatePath("/profile");
 
   return { success: true };
 }

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order Confirmed - KEEPERS</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #2F6F73; font-family: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #2F6F73;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; background-color: #2F6F73;">
+          <!-- Header -->
+          <tr>
+            <td align="center" style="padding-bottom: 32px;">
+              <h1 style="margin: 0; font-size: 48px; font-weight: normal; color: #FDFDFD; letter-spacing: 0.05em;">KEEPERS</h1>
+              <p style="margin: 8px 0 0 0; font-size: 16px; font-weight: 300; color: rgba(253, 253, 253, 0.8); font-style: italic;">Your Story, Well Kept</p>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding-bottom: 32px;">
+              <hr style="border: none; border-top: 1px solid rgba(253, 253, 253, 0.2); margin: 0;" />
+            </td>
+          </tr>
+
+          <!-- Confirmation message -->
+          <tr>
+            <td style="padding-bottom: 24px;">
+              <h2 style="margin: 0; font-size: 32px; font-weight: normal; color: #FDFDFD; text-align: center;">Order Confirmed!</h2>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding-bottom: 32px;">
+              <p style="margin: 0; font-size: 18px; line-height: 1.6; color: #FDFDFD; text-align: center;">
+                Thank you for your order, <strong>{{CUSTOMER_NAME}}</strong>! Your custom photobook "<strong>{{PROJECT_TITLE}}</strong>" is now being prepared.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Order details -->
+          <tr>
+            <td style="padding-bottom: 16px;">
+              <h3 style="margin: 0; font-size: 24px; font-weight: normal; color: #FDFDFD; text-align: center;">Order Details</h3>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding-bottom: 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: rgba(253, 253, 253, 0.1); border-radius: 8px; padding: 24px;">
+                <tr>
+                  <td style="font-size: 16px; line-height: 1.8; color: #FDFDFD;">
+                    <p style="margin: 0 0 12px 0;"><strong>Photobook Title:</strong> {{PROJECT_TITLE}}</p>
+                    <p style="margin: 0 0 12px 0;"><strong>Number of Pages:</strong> {{PAGE_COUNT}}</p>
+                    <p style="margin: 0 0 12px 0;"><strong>Order Date:</strong> {{ORDER_DATE}}</p>
+                    <p style="margin: 0 0 12px 0;"><strong>Voucher Code:</strong> {{VOUCHER_CODE}}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Delivery information -->
+          <tr>
+            <td style="padding-bottom: 16px;">
+              <h3 style="margin: 0; font-size: 24px; font-weight: normal; color: #FDFDFD; text-align: center;">Delivery Address</h3>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding-bottom: 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: rgba(253, 253, 253, 0.1); border-radius: 8px; padding: 24px;">
+                <tr>
+                  <td style="font-size: 16px; line-height: 1.8; color: #FDFDFD;">
+                    <p style="margin: 0 0 8px 0;">{{CUSTOMER_NAME}}</p>
+                    <p style="margin: 0 0 8px 0;">{{ADDRESS}}</p>
+                    <p style="margin: 0 0 8px 0;">{{POSTAL_CODE}}</p>
+                    <p style="margin: 0 0 8px 0;">{{PHONE_NUMBER}}</p>
+                    <p style="margin: 0;">{{EMAIL}}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Processing time -->
+          <tr>
+            <td style="padding-bottom: 16px;">
+              <h3 style="margin: 0; font-size: 24px; font-weight: normal; color: #FDFDFD; text-align: center;">What's Next?</h3>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding-bottom: 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-size: 16px; line-height: 1.8; color: #FDFDFD; padding-left: 40px;">
+                    <p style="margin: 0 0 8px 0;">• Your photobook will be carefully crafted and printed</p>
+                    <p style="margin: 0 0 8px 0;">• Processing time: <strong>up to 2 weeks</strong></p>
+                    <p style="margin: 0 0 8px 0;">• You'll receive tracking information once shipped</p>
+                    <p style="margin: 0 0 8px 0;">• We'll notify you of any updates</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Call to action / Support info -->
+          <tr>
+            <td align="center" style="padding-bottom: 32px;">
+              <p style="margin: 0 0 16px 0; font-size: 16px; color: #FDFDFD; text-align: center;">
+                Questions about your order? We're here to help!
+              </p>
+              <a href="mailto:hello@keepers.id" style="display: inline-block; padding: 14px 32px; background-color: #FF6F61; color: #FDFDFD; text-decoration: none; border-radius: 32px; font-size: 16px; font-weight: 500;">Contact Support</a>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding-bottom: 24px;">
+              <hr style="border: none; border-top: 1px solid rgba(253, 253, 253, 0.2); margin: 0;" />
+            </td>
+          </tr>
+
+          <!-- Tagline -->
+          <tr>
+            <td align="center" style="padding-bottom: 24px;">
+              <p style="margin: 0; font-size: 18px; font-style: italic; color: rgba(253, 253, 253, 0.8);">For the moments worth more than a scroll.</p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding-top: 16px;">
+              <p style="margin: 0; font-size: 12px; color: rgba(253, 253, 253, 0.6);">This is a confirmation email for your order at KEEPERS</p>
+              <p style="margin: 8px 0 0 0; font-size: 12px; color: rgba(253, 253, 253, 0.6);">© 2026 KEEPERS. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -16,6 +16,17 @@ function TikTokIcon({ className }: { className?: string }) {
   )
 }
 
+// Shopee icon (using custom image)
+function ShopeeIcon({ className }: { className?: string }) {
+  return (
+    <img
+      src="/icons/shopee.png"
+      alt="Shopee"
+      className={className}
+    />
+  )
+}
+
 export function SocialLinks() {
   return (
     <div className="flex gap-6 items-center justify-center">
@@ -36,6 +47,13 @@ export function SocialLinks() {
         className="text-[var(--color-primary-text)] hover:text-[var(--color-primary-text-muted)] transition-colors"
       >
         <TikTokIcon className="w-5 h-5" />
+      </a>
+      <a
+        href="#"
+        aria-label="Shopee"
+        className="text-[var(--color-primary-text)] hover:text-[var(--color-primary-text-muted)] transition-colors cursor-pointer"
+      >
+        <ShopeeIcon className="w-5 h-5" />
       </a>
     </div>
   )

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowRight, ChevronUp } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { AuthModal } from "./auth-modal"
 
@@ -51,12 +51,6 @@ export function Hero({ user }: HeroProps) {
               <ArrowRight className="w-5 h-5" />
             </button>
           </div>
-        </div>
-
-        {/* Scroll Indicator */}
-        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-[var(--color-primary-text)]">
-          <ChevronUp className="w-6 h-6" />
-          <p className="text-sm tracking-wide">Scroll</p>
         </div>
       </section>
 

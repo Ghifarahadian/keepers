@@ -13,6 +13,7 @@ import type {
   CreateElementInput,
   UpdateElementInput,
 } from "@/types/editor"
+import { applyVoucherToProject, revertVoucher } from "@/lib/voucher-actions"
 
 // ============================================
 // PROJECT ACTIONS
@@ -36,6 +37,9 @@ export async function createProject(
     .insert({
       user_id: user.id,
       title: input?.title || "Untitled Project",
+      page_count: input?.page_count || 30,
+      paper_size: input?.paper_size || 'A4',
+      voucher_code: input?.voucher_code || null,
       status: "draft",
     })
     .select()
@@ -43,37 +47,60 @@ export async function createProject(
 
   if (projectError) throw projectError
 
-  // Create first spread (2 pages - back cover and front cover)
-  const { data: page1, error: page1Error } = await supabase
-    .from("pages")
-    .insert({
+  // If voucher was provided, apply it (set status to 'being_redeemed')
+  if (input?.voucher_code) {
+    const applyResult = await applyVoucherToProject(input.voucher_code, project.id)
+    if (!applyResult.success) {
+      // If voucher application fails, delete the project and throw error
+      await supabase.from("projects").delete().eq("id", project.id)
+      throw new Error(applyResult.error || "Failed to apply voucher")
+    }
+  }
+
+  // Create all spreads upfront based on page_count
+  const pageCount = project.page_count
+  const totalSpreads = pageCount / 2
+  const pagesToCreate = []
+
+  // Create pages for all spreads
+  for (let spreadIndex = 0; spreadIndex < totalSpreads; spreadIndex++) {
+    const leftPageNumber = spreadIndex * 2 + 1
+    const rightPageNumber = spreadIndex * 2 + 2
+
+    // First spread is cover, rest are blank
+    const layoutId = "blank"
+
+    pagesToCreate.push({
       project_id: project.id,
-      page_number: 1,
-      layout_id: "blank",
+      page_number: leftPageNumber,
+      layout_id: layoutId,
     })
-    .select()
-    .single()
 
-  if (page1Error) throw page1Error
-
-  const { data: page2, error: page2Error } = await supabase
-    .from("pages")
-    .insert({
+    pagesToCreate.push({
       project_id: project.id,
-      page_number: 2,
-      layout_id: "blank",
+      page_number: rightPageNumber,
+      layout_id: layoutId,
     })
-    .select()
-    .single()
+  }
 
-  if (page2Error) throw page2Error
+  // Insert all pages at once
+  const { data: pages, error: pagesError } = await supabase
+    .from("pages")
+    .insert(pagesToCreate)
+    .select()
+
+  if (pagesError) {
+    console.error("Error creating pages:", pagesError)
+    throw new Error(`Failed to create pages: ${pagesError.message || JSON.stringify(pagesError)}`)
+  }
+
+  if (!pages || pages.length === 0) {
+    throw new Error("No pages were created")
+  }
 
   return {
     ...project,
-    pages: [
-      { ...page1, elements: [] },
-      { ...page2, elements: [] },
-    ],
+    pages: pages.map(page => ({ ...page, elements: [] })),
   }
 }
 
@@ -102,7 +129,19 @@ export async function getProject(projectId: string): Promise<Project | null> {
     .single()
 
   if (error) {
-    console.error("Error fetching project:", error)
+    console.error("Error fetching project:", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      projectId,
+      userId: user.id,
+    })
+    return null
+  }
+
+  if (!project) {
+    console.error("Project not found:", { projectId, userId: user.id })
     return null
   }
 
@@ -155,16 +194,21 @@ export async function deleteProject(projectId: string): Promise<void> {
     throw new Error("Unauthorized")
   }
 
-  // Verify ownership before deleting
+  // Verify ownership and get project details before deleting
   const { data: project, error: projectError } = await supabase
     .from("projects")
-    .select("id")
+    .select("id, voucher_code, status")
     .eq("id", projectId)
     .eq("user_id", user.id)
     .single()
 
   if (projectError || !project) {
     throw new Error("Project not found or unauthorized")
+  }
+
+  // If project has voucher and is still draft, revert voucher
+  if (project.voucher_code && project.status === 'draft') {
+    await revertVoucher(project.voucher_code)
   }
 
   // Delete all photos from storage for this project

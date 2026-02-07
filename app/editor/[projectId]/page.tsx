@@ -30,6 +30,11 @@ export default async function EditorPage({ params }: EditorPageProps) {
     redirect("/editor/new")
   }
 
+  // Check if project is completed - redirect to preview (view-only mode)
+  if (project.status === 'completed') {
+    redirect(`/editor/${projectId}/preview`)
+  }
+
   // Load all photos used in this project and regenerate signed URLs
   const uploadedPhotos = await loadProjectPhotos(project)
 

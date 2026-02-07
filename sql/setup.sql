@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   first_name VARCHAR(100),
   last_name VARCHAR(100),
+  address TEXT,
+  postal_code VARCHAR(20),
+  phone_number VARCHAR(30),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -1035,3 +1038,136 @@ BEGIN
     UPDATE public.layout_zones SET zone_type = 'photo' WHERE zone_type IS NULL;
   END IF;
 END $$;
+
+-- ============================================
+-- SECTION 19: VOUCHERS TABLE
+-- ============================================
+-- Stores voucher codes for redemption
+
+CREATE TABLE IF NOT EXISTS public.vouchers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code VARCHAR(50) NOT NULL UNIQUE,
+  is_redeemed BOOLEAN DEFAULT FALSE,
+  redeemed_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  redeemed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_vouchers_code ON public.vouchers(code);
+CREATE INDEX IF NOT EXISTS idx_vouchers_redeemed ON public.vouchers(is_redeemed) WHERE is_redeemed = FALSE;
+
+-- Enable RLS
+ALTER TABLE public.vouchers ENABLE ROW LEVEL SECURITY;
+
+-- Authenticated users can read vouchers (to check if code exists)
+DROP POLICY IF EXISTS "Authenticated users can view vouchers" ON public.vouchers;
+CREATE POLICY "Authenticated users can view vouchers"
+  ON public.vouchers FOR SELECT
+  TO authenticated
+  USING (true);
+
+-- Authenticated users can update unredeemed vouchers (to redeem them)
+DROP POLICY IF EXISTS "Authenticated users can redeem vouchers" ON public.vouchers;
+CREATE POLICY "Authenticated users can redeem vouchers"
+  ON public.vouchers FOR UPDATE
+  TO authenticated
+  USING (is_redeemed = FALSE);
+
+-- Admins can manage vouchers (insert, delete)
+DROP POLICY IF EXISTS "Admins can manage vouchers" ON public.vouchers;
+CREATE POLICY "Admins can manage vouchers"
+  ON public.vouchers FOR ALL
+  USING (EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  ));
+
+-- ============================================
+-- SECTION 20: VOUCHER LIFECYCLE & PROJECT CONFIGURATION
+-- ============================================
+-- Enhances voucher system with three-state lifecycle and adds project configuration
+
+-- Add project configuration columns
+DO $$
+BEGIN
+  -- Add page_count column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'projects' AND column_name = 'page_count') THEN
+    ALTER TABLE public.projects ADD COLUMN page_count INT CHECK (page_count IN (30, 40)) DEFAULT 30;
+  END IF;
+
+  -- Add paper_size column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'projects' AND column_name = 'paper_size') THEN
+    ALTER TABLE public.projects ADD COLUMN paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only')) DEFAULT 'A4';
+  END IF;
+
+  -- Add voucher_code column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'projects' AND column_name = 'voucher_code') THEN
+    ALTER TABLE public.projects ADD COLUMN voucher_code VARCHAR(50);
+  END IF;
+END $$;
+
+-- Add index for voucher_code lookups
+CREATE INDEX IF NOT EXISTS idx_projects_voucher_code ON public.projects(voucher_code);
+
+-- Add voucher lifecycle columns
+DO $$
+BEGIN
+  -- Add status column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'vouchers' AND column_name = 'status') THEN
+    ALTER TABLE public.vouchers
+      ADD COLUMN status VARCHAR(20) DEFAULT 'not_redeemed'
+        CHECK (status IN ('not_redeemed', 'being_redeemed', 'fully_redeemed'));
+  END IF;
+
+  -- Add page_count column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'vouchers' AND column_name = 'page_count') THEN
+    ALTER TABLE public.vouchers ADD COLUMN page_count INT CHECK (page_count IN (30, 40));
+  END IF;
+
+  -- Add paper_size column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'vouchers' AND column_name = 'paper_size') THEN
+    ALTER TABLE public.vouchers ADD COLUMN paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only'));
+  END IF;
+
+  -- Add project_id column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'vouchers' AND column_name = 'project_id') THEN
+    ALTER TABLE public.vouchers ADD COLUMN project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+-- Migrate existing voucher data from is_redeemed to status
+-- This is safe to run multiple times
+UPDATE public.vouchers
+SET status = CASE
+  WHEN is_redeemed = TRUE THEN 'fully_redeemed'
+  ELSE 'not_redeemed'
+END
+WHERE status IS NULL OR status = 'not_redeemed';
+
+-- Add indexes for voucher queries
+CREATE INDEX IF NOT EXISTS idx_vouchers_status ON public.vouchers(status);
+CREATE INDEX IF NOT EXISTS idx_vouchers_project_id ON public.vouchers(project_id);
+
+-- Update RLS policy for voucher updates (now uses status instead of is_redeemed)
+DROP POLICY IF EXISTS "Authenticated users can redeem vouchers" ON public.vouchers;
+CREATE POLICY "Authenticated users can redeem vouchers"
+  ON public.vouchers FOR UPDATE
+  TO authenticated
+  USING (status IN ('not_redeemed', 'being_redeemed'));
+
+-- Comments for documentation
+COMMENT ON COLUMN public.projects.page_count IS 'Number of pages in photobook (30 or 40)';
+COMMENT ON COLUMN public.projects.paper_size IS 'Paper size of photobook (A4 or A5)';
+COMMENT ON COLUMN public.projects.voucher_code IS 'Voucher code used for this project (if any)';
+COMMENT ON COLUMN public.vouchers.status IS 'Voucher lifecycle status: not_redeemed (available) -> being_redeemed (assigned to draft project) -> fully_redeemed (project completed)';
+COMMENT ON COLUMN public.vouchers.page_count IS 'Number of pages this voucher is valid for (30 or 40)';
+COMMENT ON COLUMN public.vouchers.paper_size IS 'Paper size this voucher is valid for (A4 or A5)';
+COMMENT ON COLUMN public.vouchers.project_id IS 'Project this voucher is currently assigned to (null when not_redeemed or fully_redeemed without project link)';

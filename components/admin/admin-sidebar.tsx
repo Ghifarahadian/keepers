@@ -9,6 +9,7 @@ import {
   Home,
   Settings,
   LogOut,
+  Ticket,
 } from "lucide-react"
 import type { AdminProfile } from "@/types/template"
 import { signOut } from "@/lib/auth-actions"
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/admin/layouts", label: "Layouts", icon: LayoutGrid },
   { href: "/admin/templates", label: "Templates", icon: FileText },
   { href: "/admin/categories", label: "Categories", icon: Folder },
+  { href: "/admin/vouchers", label: "Vouchers", icon: Ticket },
 ]
 
 export function AdminSidebar({ admin }: AdminSidebarProps) {

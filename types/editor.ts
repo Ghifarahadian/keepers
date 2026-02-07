@@ -2,12 +2,21 @@
 // KEEPERS Photobook Editor Type Definitions
 // ============================================
 
+// Paper size options (centralized)
+export type PaperSize = 'A4' | 'A5' | 'PDF Only'
+
+// Page count options (centralized)
+export type PageCount = 30 | 40
+
 export interface Project {
   id: string
   user_id: string
   title: string
   cover_photo_url?: string | null
   status: 'draft' | 'completed' | 'archived'
+  page_count?: PageCount | null
+  paper_size?: PaperSize | null
+  voucher_code?: string | null
   last_edited_at: string
   created_at: string
   updated_at: string
@@ -191,12 +200,18 @@ export type EditorAction =
 
 export interface CreateProjectInput {
   title?: string
+  page_count?: PageCount
+  paper_size?: PaperSize
+  voucher_code?: string
 }
 
 export interface UpdateProjectInput {
   title?: string
   cover_photo_url?: string
   status?: 'draft' | 'completed' | 'archived'
+  page_count?: PageCount
+  paper_size?: PaperSize
+  voucher_code?: string | null
 }
 
 export interface CreatePageInput {

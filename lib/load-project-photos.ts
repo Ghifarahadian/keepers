@@ -4,45 +4,62 @@ import { createClient } from "@/lib/supabase/server"
 import type { UploadedPhoto, Project } from "@/types/editor"
 
 /**
- * Extract all unique photos from a project and regenerate signed URLs
+ * Load ALL photos from a project's storage folder and regenerate signed URLs.
+ * This includes both photos already placed in elements AND photos that are uploaded but not yet placed.
  */
 export async function loadProjectPhotos(project: Project): Promise<UploadedPhoto[]> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  // Collect all unique photo paths from elements
-  const photoPathsSet = new Set<string>()
+  if (!user) {
+    return []
+  }
 
-  project.pages?.forEach(page => {
-    page.elements?.forEach(element => {
-      if (element.type === 'photo' && element.photo_storage_path) {
-        photoPathsSet.add(element.photo_storage_path)
-      }
+  // List ALL photos in the project's storage folder
+  const folderPath = `${user.id}/${project.id}`
+
+  const { data: files, error: listError } = await supabase.storage
+    .from("project-photos")
+    .list(folderPath, {
+      limit: 100,
+      offset: 0,
+      sortBy: { column: "created_at", order: "desc" },
     })
-  })
 
-  const photoPaths = Array.from(photoPathsSet)
+  if (listError) {
+    console.error("Failed to list photos:", listError)
+    return []
+  }
 
-  // Generate signed URLs for all photos
+  if (!files || files.length === 0) {
+    return []
+  }
+
+  // Generate signed URLs for all photos in storage
   const photos = await Promise.all(
-    photoPaths.map(async (path): Promise<UploadedPhoto | null> => {
+    files.map(async (file): Promise<UploadedPhoto | null> => {
+      const fullPath = `${folderPath}/${file.name}`
+
       const { data: signedData, error } = await supabase.storage
         .from("project-photos")
-        .createSignedUrl(path, 60 * 60 * 24 * 365) // 1 year
+        .createSignedUrl(fullPath, 60 * 60 * 24 * 365) // 1 year
 
       if (error) {
-        console.error(`Failed to create signed URL for ${path}:`, error)
+        console.error(`Failed to create signed URL for ${fullPath}:`, error)
         return null
       }
 
-      // Extract filename from path
-      const filename = path.split('/').pop() || path
+      // Extract original filename (remove timestamp prefix if present)
+      const filename = file.name
 
       return {
         id: crypto.randomUUID(),
         url: signedData.signedUrl,
-        path: path,
+        path: fullPath,
         filename: filename,
-        uploaded_at: new Date().toISOString(),
+        uploaded_at: new Date(file.created_at).toISOString(),
       }
     })
   )

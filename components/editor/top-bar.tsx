@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useEditor } from "@/lib/contexts/editor-context"
-import { Save } from "lucide-react"
+import { Save, Eye } from "lucide-react"
 
 export function EditorTopBar() {
+  const router = useRouter()
   const { state, updateProjectTitle, saveProject } = useEditor()
   const [title, setTitle] = useState(state.project.title)
   const [isEditing, setIsEditing] = useState(false)
@@ -29,6 +31,10 @@ export function EditorTopBar() {
       setTitle(state.project.title)
       setIsEditing(false)
     }
+  }
+
+  const handlePreview = () => {
+    router.push(`/editor/${state.project.id}/preview`)
   }
 
   return (
@@ -70,19 +76,34 @@ export function EditorTopBar() {
         )}
       </div>
 
-      {/* Right: Save Button */}
-      <button
-        onClick={() => saveProject()}
-        disabled={state.isSaving}
-        className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] px-6 py-2 rounded-full font-medium flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{
-          color: 'var(--color-white)',
-          fontFamily: 'var(--font-serif)'
-        }}
-      >
-        <Save className="w-4 h-4" />
-        {state.isSaving ? "Saving..." : "Save Draft"}
-      </button>
+      {/* Right: Save & Preview Buttons */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => saveProject()}
+          disabled={state.isSaving}
+          className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] px-6 py-2 rounded-full font-medium flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{
+            color: 'var(--color-white)',
+            fontFamily: 'var(--font-serif)'
+          }}
+        >
+          <Save className="w-4 h-4" />
+          {state.isSaving ? "Saving..." : "Save Draft"}
+        </button>
+
+        <button
+          onClick={handlePreview}
+          className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] px-6 py-2 rounded-full font-medium flex items-center gap-2 transition-colors"
+          style={{
+            color: 'var(--color-white)',
+            fontFamily: 'var(--font-serif)'
+          }}
+          title="Preview photobook"
+        >
+          <Eye className="w-4 h-4" />
+          <span>Preview</span>
+        </button>
+      </div>
     </header>
   )
 }
