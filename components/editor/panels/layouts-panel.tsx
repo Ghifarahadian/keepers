@@ -51,11 +51,11 @@ export function LayoutsPanel() {
         dispatch({ type: "DELETE_ELEMENT", payload: { pageId: currentPage.id, elementId: element.id } })
       }
 
-      // Create PictureContainers based on layout zones
+      // Create elements based on layout zones (photo or text)
       for (let i = 0; i < layout.zones.length; i++) {
         const zone = layout.zones[i]
         await addElementToCanvas(currentPage.id, {
-          type: "photo",
+          type: zone.zone_type || "photo",
           page_id: currentPage.id,
           position_x: zone.position_x,
           position_y: zone.position_y,

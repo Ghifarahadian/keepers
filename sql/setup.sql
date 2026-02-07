@@ -625,6 +625,7 @@ CREATE TABLE IF NOT EXISTS public.layout_zones (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   layout_id UUID NOT NULL REFERENCES public.layouts(id) ON DELETE CASCADE,
   zone_index INT NOT NULL,
+  zone_type VARCHAR(10) NOT NULL DEFAULT 'photo' CHECK (zone_type IN ('photo', 'text')),
   position_x FLOAT NOT NULL,
   position_y FLOAT NOT NULL,
   width FLOAT NOT NULL,
@@ -940,61 +941,61 @@ ON CONFLICT (slug) DO NOTHING;
 
 -- Insert layout zones for each layout
 -- Single layout (1 zone)
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 0, 10, 10, 80, 80 FROM public.layouts WHERE slug = 'single'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 0, 'photo', 10, 10, 80, 80 FROM public.layouts WHERE slug = 'single'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
 
 -- Double layout (2 zones)
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 0, 5, 10, 42.5, 80 FROM public.layouts WHERE slug = 'double'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 0, 'photo', 5, 10, 42.5, 80 FROM public.layouts WHERE slug = 'double'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 1, 52.5, 10, 42.5, 80 FROM public.layouts WHERE slug = 'double'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 1, 'photo', 52.5, 10, 42.5, 80 FROM public.layouts WHERE slug = 'double'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
 
 -- Triple layout (3 zones)
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 0, 5, 10, 60, 80 FROM public.layouts WHERE slug = 'triple'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 0, 'photo', 5, 10, 60, 80 FROM public.layouts WHERE slug = 'triple'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 1, 70, 10, 25, 37.5 FROM public.layouts WHERE slug = 'triple'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 1, 'photo', 70, 10, 25, 37.5 FROM public.layouts WHERE slug = 'triple'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 2, 70, 52.5, 25, 37.5 FROM public.layouts WHERE slug = 'triple'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 2, 'photo', 70, 52.5, 25, 37.5 FROM public.layouts WHERE slug = 'triple'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
 
 -- Grid 4 layout (4 zones)
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 0, 5, 5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 0, 'photo', 5, 5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 1, 52.5, 5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 1, 'photo', 52.5, 5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 2, 5, 52.5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 2, 'photo', 5, 52.5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 3, 52.5, 52.5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 3, 'photo', 52.5, 52.5, 42.5, 42.5 FROM public.layouts WHERE slug = 'grid-4'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
 
 -- Grid 6 layout (6 zones)
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 0, 5, 3, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 0, 'photo', 5, 3, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 1, 52.5, 3, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 1, 'photo', 52.5, 3, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 2, 5, 36, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 2, 'photo', 5, 36, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 3, 52.5, 36, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 3, 'photo', 52.5, 36, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 4, 5, 69, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 4, 'photo', 5, 69, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
-INSERT INTO public.layout_zones (layout_id, zone_index, position_x, position_y, width, height)
-SELECT id, 5, 52.5, 69, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
+INSERT INTO public.layout_zones (layout_id, zone_index, zone_type, position_x, position_y, width, height)
+SELECT id, 5, 'photo', 52.5, 69, 42.5, 28 FROM public.layouts WHERE slug = 'grid-6'
 ON CONFLICT (layout_id, zone_index) DO NOTHING;
 
 -- ============================================
@@ -1011,3 +1012,26 @@ INSERT INTO public.template_categories (slug, name, description, icon, sort_orde
   ('portfolio', 'Portfolio', 'Professional portfolios', 'Briefcase', 6),
   ('general', 'General', 'Multipurpose templates', 'Book', 7)
 ON CONFLICT (slug) DO NOTHING;
+
+-- ============================================
+-- MIGRATION: Add zone_type column to layout_zones
+-- ============================================
+-- Run this if you have an existing database without the zone_type column
+-- This statement is safe to run multiple times (IF NOT EXISTS)
+
+DO $$
+BEGIN
+  -- Add zone_type column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'layout_zones' AND column_name = 'zone_type') THEN
+    ALTER TABLE public.layout_zones
+    ADD COLUMN zone_type VARCHAR(10) NOT NULL DEFAULT 'photo';
+
+    -- Add check constraint
+    ALTER TABLE public.layout_zones
+    ADD CONSTRAINT zone_type_check CHECK (zone_type IN ('photo', 'text'));
+
+    -- Update existing zones to have 'photo' type (already handled by default)
+    UPDATE public.layout_zones SET zone_type = 'photo' WHERE zone_type IS NULL;
+  END IF;
+END $$;

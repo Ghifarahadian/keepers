@@ -78,6 +78,7 @@ export interface LayoutZone {
   position_y: number
   width: number
   height: number
+  zone_type?: "photo" | "text"
 }
 
 // ============================================

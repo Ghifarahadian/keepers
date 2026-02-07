@@ -25,6 +25,7 @@ export interface LayoutZoneDB {
   id: string
   layout_id: string
   zone_index: number
+  zone_type: "photo" | "text"
   position_x: number
   position_y: number
   width: number
@@ -112,6 +113,7 @@ export interface CreateLayoutInput {
     position_y: number
     width: number
     height: number
+    zone_type: "photo" | "text"
   }>
 }
 
@@ -127,6 +129,7 @@ export interface UpdateLayoutInput {
     position_y: number
     width: number
     height: number
+    zone_type: "photo" | "text"
   }>
 }
 

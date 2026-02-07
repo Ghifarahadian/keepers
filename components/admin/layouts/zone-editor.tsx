@@ -1,13 +1,16 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
-import { Plus, Trash2, Move } from "lucide-react"
+import { Plus, Trash2, Move, Image, Type } from "lucide-react"
 
-interface Zone {
+export type ZoneType = "photo" | "text"
+
+export interface Zone {
   position_x: number
   position_y: number
   width: number
   height: number
+  zone_type: ZoneType
 }
 
 interface ZoneEditorProps {
@@ -22,6 +25,7 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null)
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null)
   const [resizing, setResizing] = useState<string | null>(null)
+  const [newZoneType, setNewZoneType] = useState<ZoneType>("photo")
 
   const getMousePosition = useCallback((e: React.MouseEvent) => {
     if (!canvasRef.current) return { x: 0, y: 0 }
@@ -136,6 +140,7 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
           position_y: Math.round(y * 10) / 10,
           width: Math.round(width * 10) / 10,
           height: Math.round(height * 10) / 10,
+          zone_type: newZoneType,
         }
         onChange([...zones, newZone])
         setSelectedIndex(zones.length)
@@ -148,12 +153,13 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
     setResizing(null)
   }
 
-  const addZone = () => {
+  const addZone = (type: ZoneType) => {
     const newZone: Zone = {
       position_x: 10,
       position_y: 10,
       width: 30,
-      height: 30,
+      height: type === "text" ? 15 : 30,
+      zone_type: type,
     }
     onChange([...zones, newZone])
     setSelectedIndex(zones.length)
@@ -164,7 +170,7 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
     setSelectedIndex(null)
   }
 
-  const updateZoneValue = (index: number, field: keyof Zone, value: number) => {
+  const updateZoneValue = (index: number, field: keyof Zone, value: number | ZoneType) => {
     const newZones = [...zones]
     newZones[index] = { ...newZones[index], [field]: value }
     onChange(newZones)
@@ -199,7 +205,18 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
         />
 
         {/* Zones */}
-        {zones.map((zone, index) => (
+        {zones.map((zone, index) => {
+          const isPhoto = zone.zone_type === "photo"
+          const bgColor = isPhoto
+            ? selectedIndex === index
+              ? "rgba(212, 120, 108, 0.3)"
+              : "rgba(212, 120, 108, 0.15)"
+            : selectedIndex === index
+              ? "rgba(47, 111, 115, 0.3)"
+              : "rgba(47, 111, 115, 0.15)"
+          const borderColor = isPhoto ? "var(--color-accent)" : "#2F6F73"
+
+          return (
           <div
             key={index}
             className={`absolute border-2 ${
@@ -210,28 +227,26 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
               top: `${zone.position_y}%`,
               width: `${zone.width}%`,
               height: `${zone.height}%`,
-              backgroundColor:
-                selectedIndex === index
-                  ? "rgba(212, 120, 108, 0.3)"
-                  : "rgba(212, 120, 108, 0.15)",
-              borderColor: "var(--color-accent)",
+              backgroundColor: bgColor,
+              borderColor: borderColor,
               cursor: selectedIndex === index ? "move" : "pointer",
               // @ts-expect-error - Tailwind CSS variable for ring color
-              "--tw-ring-color": "var(--color-accent)",
+              "--tw-ring-color": borderColor,
             }}
             onClick={(e) => {
               e.stopPropagation()
               setSelectedIndex(index)
             }}
           >
-            {/* Zone index */}
+            {/* Zone index and type icon */}
             <span
-              className="absolute top-1 left-1 text-xs font-bold px-1.5 py-0.5 rounded"
+              className="absolute top-1 left-1 text-xs font-bold px-1.5 py-0.5 rounded flex items-center gap-1"
               style={{
-                backgroundColor: "var(--color-accent)",
+                backgroundColor: borderColor,
                 color: "var(--color-white)",
               }}
             >
+              {isPhoto ? <Image className="w-3 h-3" /> : <Type className="w-3 h-3" />}
               {index + 1}
             </span>
 
@@ -240,7 +255,7 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
               <>
                 <div
                   className="absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-6 rounded cursor-ew-resize"
-                  style={{ backgroundColor: "var(--color-accent)" }}
+                  style={{ backgroundColor: borderColor }}
                   onMouseDown={(e) => {
                     e.stopPropagation()
                     setResizing("e")
@@ -248,7 +263,7 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
                 />
                 <div
                   className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 h-2 rounded cursor-ns-resize"
-                  style={{ backgroundColor: "var(--color-accent)" }}
+                  style={{ backgroundColor: borderColor }}
                   onMouseDown={(e) => {
                     e.stopPropagation()
                     setResizing("s")
@@ -256,7 +271,7 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
                 />
                 <div
                   className="absolute -right-1 -bottom-1 w-3 h-3 rounded cursor-nwse-resize"
-                  style={{ backgroundColor: "var(--color-accent)" }}
+                  style={{ backgroundColor: borderColor }}
                   onMouseDown={(e) => {
                     e.stopPropagation()
                     setResizing("se")
@@ -265,7 +280,7 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
               </>
             )}
           </div>
-        ))}
+        )})}
 
         {/* Draw preview */}
         {isDrawing && drawStart && (
@@ -290,15 +305,61 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Zone type selector for drawing */}
+        <div className="flex items-center gap-1 mr-2">
+          <span className="text-xs" style={{ color: "var(--color-secondary)" }}>Draw:</span>
+          <button
+            type="button"
+            onClick={() => setNewZoneType("photo")}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
+              newZoneType === "photo" ? "text-white" : ""
+            }`}
+            style={{
+              backgroundColor: newZoneType === "photo" ? "var(--color-accent)" : "transparent",
+              border: `1px solid var(--color-accent)`,
+              color: newZoneType === "photo" ? "white" : "var(--color-accent)",
+            }}
+          >
+            <Image className="w-3 h-3" />
+            Photo
+          </button>
+          <button
+            type="button"
+            onClick={() => setNewZoneType("text")}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
+              newZoneType === "text" ? "text-white" : ""
+            }`}
+            style={{
+              backgroundColor: newZoneType === "text" ? "#2F6F73" : "transparent",
+              border: "1px solid #2F6F73",
+              color: newZoneType === "text" ? "white" : "#2F6F73",
+            }}
+          >
+            <Type className="w-3 h-3" />
+            Text
+          </button>
+        </div>
+
+        <div className="h-6 w-px bg-gray-300" />
+
         <button
           type="button"
-          onClick={addZone}
+          onClick={() => addZone("photo")}
           className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm"
-          style={{ borderColor: "var(--color-border)" }}
+          style={{ borderColor: "var(--color-accent)", color: "var(--color-accent)" }}
         >
-          <Plus className="w-4 h-4" />
-          Add Zone
+          <Image className="w-4 h-4" />
+          Add Photo Zone
+        </button>
+        <button
+          type="button"
+          onClick={() => addZone("text")}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm"
+          style={{ borderColor: "#2F6F73", color: "#2F6F73" }}
+        >
+          <Type className="w-4 h-4" />
+          Add Text Zone
         </button>
         {selectedIndex !== null && (
           <button
@@ -322,11 +383,41 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
             borderColor: "var(--color-border)",
           }}
         >
-          <div className="flex items-center gap-2 mb-3">
-            <Move className="w-4 h-4" style={{ color: "var(--color-accent)" }} />
-            <span className="font-medium" style={{ color: "var(--color-neutral)" }}>
-              Zone {selectedIndex + 1}
-            </span>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Move className="w-4 h-4" style={{ color: zones[selectedIndex].zone_type === "photo" ? "var(--color-accent)" : "#2F6F73" }} />
+              <span className="font-medium" style={{ color: "var(--color-neutral)" }}>
+                Zone {selectedIndex + 1}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => updateZoneValue(selectedIndex, "zone_type", "photo")}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-xs`}
+                style={{
+                  backgroundColor: zones[selectedIndex].zone_type === "photo" ? "var(--color-accent)" : "transparent",
+                  border: `1px solid var(--color-accent)`,
+                  color: zones[selectedIndex].zone_type === "photo" ? "white" : "var(--color-accent)",
+                }}
+              >
+                <Image className="w-3 h-3" />
+                Photo
+              </button>
+              <button
+                type="button"
+                onClick={() => updateZoneValue(selectedIndex, "zone_type", "text")}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-xs`}
+                style={{
+                  backgroundColor: zones[selectedIndex].zone_type === "text" ? "#2F6F73" : "transparent",
+                  border: "1px solid #2F6F73",
+                  color: zones[selectedIndex].zone_type === "text" ? "white" : "#2F6F73",
+                }}
+              >
+                <Type className="w-3 h-3" />
+                Text
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

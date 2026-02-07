@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { Project } from "@/types/editor"
 import type { Template, TemplateCategory, LayoutDB } from "@/types/template"
+import { getLayoutBySlug } from "@/lib/layout-actions"
 
 // ============================================
 // TEMPLATE CATEGORY ACTIONS
@@ -242,6 +243,35 @@ export async function createProjectFromTemplate(
 
       // Create elements from template elements (text elements, decorations)
       const elements: Array<Record<string, unknown>> = []
+
+      // Create elements for each layout zone (photo or text containers)
+      const layout = await getLayoutBySlug(layoutSlug)
+      if (layout && layout.zones.length > 0) {
+        for (let i = 0; i < layout.zones.length; i++) {
+          const zone = layout.zones[i]
+          const zoneType = zone.zone_type || "photo"
+          const { data: zoneElement, error: zoneElementError } = await supabase
+            .from("elements")
+            .insert({
+              page_id: page.id,
+              type: zoneType,
+              position_x: zone.position_x,
+              position_y: zone.position_y,
+              width: zone.width,
+              height: zone.height,
+              rotation: 0,
+              z_index: i,
+            })
+            .select()
+            .single()
+
+          if (!zoneElementError && zoneElement) {
+            elements.push(zoneElement)
+          }
+        }
+      }
+
+      // Create elements from template elements (text elements, decorations)
       if (templatePage.template_elements && templatePage.template_elements.length > 0) {
         for (const templateElement of templatePage.template_elements) {
           const { data: element, error: elementError } = await supabase

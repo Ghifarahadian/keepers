@@ -4,20 +4,13 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createLayout, updateLayout } from "@/lib/admin-actions"
 import type { LayoutDB, CreateLayoutInput, UpdateLayoutInput } from "@/types/template"
-import { ZoneEditor } from "./zone-editor"
+import { ZoneEditor, type Zone } from "./zone-editor"
 import { Loader2, Save, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 interface LayoutFormProps {
   layout?: LayoutDB
   isEdit?: boolean
-}
-
-interface ZoneInput {
-  position_x: number
-  position_y: number
-  width: number
-  height: number
 }
 
 export function LayoutForm({ layout, isEdit }: LayoutFormProps) {
@@ -30,12 +23,13 @@ export function LayoutForm({ layout, isEdit }: LayoutFormProps) {
   const [description, setDescription] = useState(layout?.description || "")
   const [icon, setIcon] = useState(layout?.icon || "")
   const [isActive, setIsActive] = useState(layout?.is_active ?? true)
-  const [zones, setZones] = useState<ZoneInput[]>(
+  const [zones, setZones] = useState<Zone[]>(
     layout?.layout_zones?.map((z) => ({
       position_x: z.position_x,
       position_y: z.position_y,
       width: z.width,
       height: z.height,
+      zone_type: z.zone_type || "photo",
     })) || []
   )
 

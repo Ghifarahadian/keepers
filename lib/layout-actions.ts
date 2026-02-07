@@ -30,7 +30,7 @@ export async function getLayouts(): Promise<Layout[]> {
   }
 
   // Transform to Layout format (using slug as id for backward compatibility)
-  return layouts.map((l: LayoutDB & { layout_zones: Array<{ zone_index: number; position_x: number; position_y: number; width: number; height: number }> }) => ({
+  return layouts.map((l: LayoutDB & { layout_zones: Array<{ zone_index: number; zone_type?: "photo" | "text"; position_x: number; position_y: number; width: number; height: number }> }) => ({
     id: l.slug, // Use slug as ID for backward compatibility with existing pages
     name: l.name,
     description: l.description || "",
@@ -42,6 +42,7 @@ export async function getLayouts(): Promise<Layout[]> {
         position_y: z.position_y,
         width: z.width,
         height: z.height,
+        zone_type: z.zone_type || "photo",
       })),
   }))
 }
@@ -71,11 +72,12 @@ export async function getLayoutBySlug(slug: string): Promise<Layout | null> {
     icon: data.icon || undefined,
     zones: data.layout_zones
       .sort((a: { zone_index: number }, b: { zone_index: number }) => a.zone_index - b.zone_index)
-      .map((z: { position_x: number; position_y: number; width: number; height: number }) => ({
+      .map((z: { zone_type?: "photo" | "text"; position_x: number; position_y: number; width: number; height: number }) => ({
         position_x: z.position_x,
         position_y: z.position_y,
         width: z.width,
         height: z.height,
+        zone_type: z.zone_type || "photo",
       })),
   }
 }

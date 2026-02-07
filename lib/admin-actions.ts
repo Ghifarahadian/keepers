@@ -147,6 +147,7 @@ export async function createLayout(input: CreateLayoutInput): Promise<LayoutDB> 
     const zones = input.zones.map((z, i) => ({
       layout_id: layout.id,
       zone_index: i,
+      zone_type: z.zone_type,
       position_x: z.position_x,
       position_y: z.position_y,
       width: z.width,
@@ -201,6 +202,7 @@ export async function updateLayout(
       const newZones = zones.map((z, i) => ({
         layout_id: layoutId,
         zone_index: i,
+        zone_type: z.zone_type,
         position_x: z.position_x,
         position_y: z.position_y,
         width: z.width,
