@@ -3,8 +3,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { Project } from "@/types/editor"
-import type { TemplateCategory } from "@/types/template"
-import { applyVoucherToProject, revertVoucher } from "@/lib/voucher-actions"
+import type { Template, TemplateCategory } from "@/types/template"
+import { applyVoucherToProject } from "@/lib/voucher-actions"
 
 // ============================================
 // TEMPLATE CATEGORY ACTIONS
@@ -52,7 +52,6 @@ export async function getTemplateCategoryBySlug(
 
 // ============================================
 // TEMPLATE ACTIONS
-// (Templates are now projects with is_template=TRUE)
 // ============================================
 
 /**
@@ -60,16 +59,15 @@ export async function getTemplateCategoryBySlug(
  */
 export async function getTemplates(
   categorySlug?: string
-): Promise<Project[]> {
+): Promise<Template[]> {
   const supabase = await createClient()
 
   let query = supabase
-    .from("projects")
+    .from("templates")
     .select(`
       *,
       category:template_categories(*)
     `)
-    .eq("is_template", true)
     .eq("is_active", true)
     .order("created_at", { ascending: false })
 
@@ -88,22 +86,21 @@ export async function getTemplates(
     return []
   }
 
-  return data as Project[]
+  return data as Template[]
 }
 
 /**
  * Get featured templates
  */
-export async function getFeaturedTemplates(): Promise<Project[]> {
+export async function getFeaturedTemplates(): Promise<Template[]> {
   const supabase = await createClient()
 
   const { data, error } = await supabase
-    .from("projects")
+    .from("templates")
     .select(`
       *,
       category:template_categories(*)
     `)
-    .eq("is_template", true)
     .eq("is_active", true)
     .eq("is_featured", true)
     .order("created_at", { ascending: false })
@@ -114,27 +111,26 @@ export async function getFeaturedTemplates(): Promise<Project[]> {
     return []
   }
 
-  return data as Project[]
+  return data as Template[]
 }
 
 /**
  * Get a single template with all pages and zones
  */
-export async function getTemplate(templateId: string): Promise<Project | null> {
+export async function getTemplate(templateId: string): Promise<Template | null> {
   const supabase = await createClient()
 
   const { data, error } = await supabase
-    .from("projects")
+    .from("templates")
     .select(`
       *,
       category:template_categories(*),
       pages(
         *,
-        zones!zones_page_id_fkey(*)
+        zones:page_zones(*)
       )
     `)
     .eq("id", templateId)
-    .eq("is_template", true)
     .eq("is_active", true)
     .single()
 
@@ -144,7 +140,7 @@ export async function getTemplate(templateId: string): Promise<Project | null> {
   }
 
   // Sort pages by page_number
-  const template = data as Project
+  const template = data as Template
   if (template.pages) {
     template.pages.sort((a, b) => a.page_number - b.page_number)
   }
@@ -155,27 +151,26 @@ export async function getTemplate(templateId: string): Promise<Project | null> {
 /**
  * Get a template by slug
  */
-export async function getTemplateBySlug(slug: string): Promise<Project | null> {
+export async function getTemplateBySlug(slug: string): Promise<Template | null> {
   const supabase = await createClient()
 
   const { data, error } = await supabase
-    .from("projects")
+    .from("templates")
     .select(`
       *,
       category:template_categories(*),
       pages(
         *,
-        zones!zones_page_id_fkey(*)
+        zones:page_zones(*)
       )
     `)
     .eq("slug", slug)
-    .eq("is_template", true)
     .eq("is_active", true)
     .single()
 
   if (error || !data) return null
 
-  const template = data as Project
+  const template = data as Template
   if (template.pages) {
     template.pages.sort((a, b) => a.page_number - b.page_number)
   }
@@ -189,7 +184,7 @@ export async function getTemplateBySlug(slug: string): Promise<Project | null> {
 
 /**
  * Create a new project from a template
- * Copies template project, pages, and zones to create a new user project
+ * Copies template pages and zones to create a new user project
  */
 export async function createProjectFromTemplate(
   templateId: string,
@@ -211,17 +206,17 @@ export async function createProjectFromTemplate(
     throw new Error("Template not found")
   }
 
-  // Create project (copy template data, set is_template=false)
+  // Create project (copy template configuration)
   const { data: project, error: projectError } = await supabase
     .from("projects")
     .insert({
       user_id: user.id,
       title: projectTitle || template.title,
+      template_id: templateId, // Track which template was used
       page_count: template.page_count,
       paper_size: template.paper_size,
       voucher_code: voucherCode || null,
       status: "draft",
-      is_template: false,
     })
     .select()
     .single()
@@ -246,9 +241,9 @@ export async function createProjectFromTemplate(
         .from("pages")
         .insert({
           project_id: project.id,
+          template_id: null, // Project pages don't have template_id
           page_number: templatePage.page_number,
           title: templatePage.title,
-          is_template: false,
         })
         .select()
         .single()
@@ -259,17 +254,15 @@ export async function createProjectFromTemplate(
       if (templatePage.zones && templatePage.zones.length > 0) {
         const zonesToCreate = templatePage.zones.map((zone) => ({
           page_id: newPage.id,
-          layout_id: null, // Page zones have layout_id=NULL
           zone_index: zone.zone_index,
           position_x: zone.position_x,
           position_y: zone.position_y,
           width: zone.width,
           height: zone.height,
-          zone_type: zone.zone_type,
         }))
 
         const { error: zonesError } = await supabase
-          .from("zones")
+          .from("page_zones")
           .insert(zonesToCreate)
 
         if (zonesError) {
@@ -324,14 +317,14 @@ export async function createProjectFromTemplate(
 
       pagesToCreate.push({
         project_id: project.id,
+        template_id: null,
         page_number: leftPageNumber,
-        is_template: false,
       })
 
       pagesToCreate.push({
         project_id: project.id,
+        template_id: null,
         page_number: rightPageNumber,
-        is_template: false,
       })
     }
 

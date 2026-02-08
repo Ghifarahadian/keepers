@@ -81,7 +81,7 @@ export async function getAdminLayouts(): Promise<LayoutDB[]> {
     .from("layouts")
     .select(`
       *,
-      zones!zones_layout_id_fkey (*)
+      zones:layout_zones (*)
     `)
     .order("sort_order")
 
@@ -107,7 +107,7 @@ export async function getAdminLayout(layoutId: string): Promise<LayoutDB | null>
     .from("layouts")
     .select(`
       *,
-      zones!zones_layout_id_fkey (*)
+      zones:layout_zones (*)
     `)
     .eq("id", layoutId)
     .single()
@@ -146,7 +146,6 @@ export async function createLayout(input: CreateLayoutInput): Promise<LayoutDB> 
   if (input.zones.length > 0) {
     const zones = input.zones.map((z, i) => ({
       layout_id: layout.id,
-      page_id: null, // Layout zones have page_id=NULL
       zone_index: i,
       zone_type: z.zone_type,
       position_x: z.position_x,
@@ -156,7 +155,7 @@ export async function createLayout(input: CreateLayoutInput): Promise<LayoutDB> 
     }))
 
     const { error: zonesError } = await supabase
-      .from("zones")
+      .from("layout_zones")
       .insert(zones)
 
     if (zonesError) throw zonesError
@@ -196,13 +195,12 @@ export async function updateLayout(
   // Update zones if provided
   if (zones !== undefined) {
     // Delete existing zones
-    await supabase.from("zones").delete().eq("layout_id", layoutId)
+    await supabase.from("layout_zones").delete().eq("layout_id", layoutId)
 
     // Insert new zones
     if (zones.length > 0) {
       const newZones = zones.map((z, i) => ({
         layout_id: layoutId,
-        page_id: null, // Layout zones have page_id=NULL
         zone_index: i,
         zone_type: z.zone_type,
         position_x: z.position_x,
@@ -211,7 +209,7 @@ export async function updateLayout(
         height: z.height,
       }))
 
-      const { error } = await supabase.from("zones").insert(newZones)
+      const { error } = await supabase.from("layout_zones").insert(newZones)
       if (error) throw error
     }
   }
@@ -345,13 +343,12 @@ export async function deleteCategory(categoryId: string): Promise<void> {
 
 // ============================================
 // TEMPLATE ADMIN ACTIONS
-// (Templates are now projects with is_template=TRUE)
 // ============================================
 
 /**
  * Get all templates (including inactive) for admin
  */
-export async function getAdminTemplates(): Promise<AdminProject[]> {
+export async function getAdminTemplates() {
   const supabase = await createClient()
 
   if (!(await isAdmin())) {
@@ -359,12 +356,11 @@ export async function getAdminTemplates(): Promise<AdminProject[]> {
   }
 
   const { data, error } = await supabase
-    .from("projects")
+    .from("templates")
     .select(`
       *,
       category:template_categories(*)
     `)
-    .eq("is_template", true)
     .order("created_at", { ascending: false })
 
   if (error) {
@@ -372,13 +368,13 @@ export async function getAdminTemplates(): Promise<AdminProject[]> {
     return []
   }
 
-  return data as AdminProject[]
+  return data
 }
 
 /**
  * Get a single template with pages for admin
  */
-export async function getAdminTemplate(templateId: string): Promise<Project | null> {
+export async function getAdminTemplate(templateId: string) {
   const supabase = await createClient()
 
   if (!(await isAdmin())) {
@@ -386,27 +382,26 @@ export async function getAdminTemplate(templateId: string): Promise<Project | nu
   }
 
   const { data, error } = await supabase
-    .from("projects")
+    .from("templates")
     .select(`
       *,
       category:template_categories(*),
-      pages(
+      pages!pages_template_id_fkey(
         *,
-        page_zones(*)
+        zones:page_zones(*)
       )
     `)
     .eq("id", templateId)
-    .eq("is_template", true)
     .single()
 
   if (error) return null
 
-  const template = data as Project
-  if (template.pages) {
-    template.pages.sort((a, b) => a.page_number - b.page_number)
+  // Sort pages by page_number
+  if (data.pages) {
+    data.pages.sort((a: any, b: any) => a.page_number - b.page_number)
   }
 
-  return template
+  return data
 }
 
 /**
@@ -421,16 +416,16 @@ export async function createTemplate(input: {
   page_count?: PageCount
   paper_size?: PaperSize
   pages: Array<{ page_number: number; layout_slug: string; title?: string }>
-}): Promise<Project> {
+}) {
   const supabase = await createClient()
 
   if (!(await isAdmin())) {
     throw new Error("Unauthorized")
   }
 
-  // Create template project
+  // Create template
   const { data: template, error: templateError } = await supabase
-    .from("projects")
+    .from("templates")
     .insert({
       slug: input.slug,
       title: input.title,
@@ -439,9 +434,7 @@ export async function createTemplate(input: {
       thumbnail_url: input.thumbnail_url,
       page_count: input.page_count || input.pages.length,
       paper_size: input.paper_size,
-      is_template: true,
       is_active: true,
-      user_id: null, // Templates have no owner
     })
     .select()
     .single()
@@ -455,10 +448,10 @@ export async function createTemplate(input: {
       const { data: page, error: pageError } = await supabase
         .from("pages")
         .insert({
-          project_id: template.id,
+          template_id: template.id,
+          project_id: null, // Template pages don't have project_id
           page_number: pageInput.page_number,
           title: pageInput.title,
-          is_template: true,
         })
         .select()
         .single()
@@ -469,24 +462,22 @@ export async function createTemplate(input: {
       if (pageInput.layout_slug && pageInput.layout_slug !== 'blank') {
         const { data: layout } = await supabase
           .from("layouts")
-          .select("id, zones!zones_layout_id_fkey(*)")
+          .select("id, zones:layout_zones(*)")
           .eq("slug", pageInput.layout_slug)
           .single()
 
         if (layout && layout.zones && layout.zones.length > 0) {
           const zonesToCreate = layout.zones.map((zone: any) => ({
             page_id: page.id,
-            layout_id: null, // Page zones have layout_id=NULL
             zone_index: zone.zone_index,
             position_x: zone.position_x,
             position_y: zone.position_y,
             width: zone.width,
             height: zone.height,
-            zone_type: zone.zone_type,
           }))
 
           const { error: zonesError } = await supabase
-            .from("zones")
+            .from("page_zones")
             .insert(zonesToCreate)
 
           if (zonesError) throw zonesError
@@ -526,10 +517,9 @@ export async function updateTemplate(
   }
 
   const { error } = await supabase
-    .from("projects")
+    .from("templates")
     .update(input)
     .eq("id", templateId)
-    .eq("is_template", true)
 
   if (error) throw error
 
@@ -548,10 +538,9 @@ export async function deleteTemplate(templateId: string): Promise<void> {
   }
 
   const { error } = await supabase
-    .from("projects")
+    .from("templates")
     .delete()
     .eq("id", templateId)
-    .eq("is_template", true)
 
   if (error) throw error
 
@@ -577,10 +566,10 @@ export async function addTemplatePage(
   const { data: page, error: pageError } = await supabase
     .from("pages")
     .insert({
-      project_id: templateId,
+      template_id: templateId,
+      project_id: null, // Template pages don't have project_id
       page_number: pageNumber,
       title,
-      is_template: true,
     })
     .select()
     .single()
@@ -591,24 +580,22 @@ export async function addTemplatePage(
   if (layoutSlug && layoutSlug !== 'blank') {
     const { data: layout } = await supabase
       .from("layouts")
-      .select("id, zones!zones_layout_id_fkey(*)")
+      .select("id, zones:layout_zones(*)")
       .eq("slug", layoutSlug)
       .single()
 
     if (layout && layout.zones && layout.zones.length > 0) {
       const zonesToCreate = layout.zones.map((zone: any) => ({
         page_id: page.id,
-        layout_id: null, // Page zones have layout_id=NULL
         zone_index: zone.zone_index,
         position_x: zone.position_x,
         position_y: zone.position_y,
         width: zone.width,
         height: zone.height,
-        zone_type: zone.zone_type,
       }))
 
       const { error: zonesError } = await supabase
-        .from("zones")
+        .from("page_zones")
         .insert(zonesToCreate)
 
       if (zonesError) throw zonesError
@@ -619,10 +606,10 @@ export async function addTemplatePage(
   const { data: pages } = await supabase
     .from("pages")
     .select("id")
-    .eq("project_id", templateId)
+    .eq("template_id", templateId)
 
   await supabase
-    .from("projects")
+    .from("templates")
     .update({ page_count: pages?.length || 0 })
     .eq("id", templateId)
 
@@ -656,30 +643,28 @@ export async function updateTemplatePage(
   // Update layout by copying zones
   if (layoutSlug !== undefined) {
     // Delete existing zones
-    await supabase.from("zones").delete().eq("page_id", pageId)
+    await supabase.from("page_zones").delete().eq("page_id", pageId)
 
     // Copy zones from new layout
     if (layoutSlug && layoutSlug !== 'blank') {
       const { data: layout } = await supabase
         .from("layouts")
-        .select("id, zones!zones_layout_id_fkey(*)")
+        .select("id, zones:layout_zones(*)")
         .eq("slug", layoutSlug)
         .single()
 
       if (layout && layout.zones && layout.zones.length > 0) {
         const zonesToCreate = layout.zones.map((zone: any) => ({
           page_id: pageId,
-          layout_id: null, // Page zones have layout_id=NULL
           zone_index: zone.zone_index,
           position_x: zone.position_x,
           position_y: zone.position_y,
           width: zone.width,
           height: zone.height,
-          zone_type: zone.zone_type,
         }))
 
         const { error: zonesError } = await supabase
-          .from("zones")
+          .from("page_zones")
           .insert(zonesToCreate)
 
         if (zonesError) throw zonesError
@@ -690,12 +675,12 @@ export async function updateTemplatePage(
   // Get template ID for revalidation
   const { data: page } = await supabase
     .from("pages")
-    .select("project_id")
+    .select("template_id")
     .eq("id", pageId)
     .single()
 
-  if (page) {
-    revalidatePath(`/admin/templates/${page.project_id}`)
+  if (page?.template_id) {
+    revalidatePath(`/admin/templates/${page.template_id}`)
   }
 }
 
@@ -712,7 +697,7 @@ export async function deleteTemplatePage(pageId: string): Promise<void> {
   // Get template ID before deletion
   const { data: page } = await supabase
     .from("pages")
-    .select("project_id")
+    .select("template_id")
     .eq("id", pageId)
     .single()
 
@@ -724,18 +709,18 @@ export async function deleteTemplatePage(pageId: string): Promise<void> {
   if (error) throw error
 
   // Update page count
-  if (page) {
+  if (page?.template_id) {
     const { data: pages } = await supabase
       .from("pages")
       .select("id")
-      .eq("project_id", page.project_id)
+      .eq("template_id", page.template_id)
 
     await supabase
-      .from("projects")
+      .from("templates")
       .update({ page_count: pages?.length || 0 })
-      .eq("id", page.project_id)
+      .eq("id", page.template_id)
 
-    revalidatePath(`/admin/templates/${page.project_id}`)
+    revalidatePath(`/admin/templates/${page.template_id}`)
   }
 }
 
@@ -900,6 +885,7 @@ export async function deleteVoucher(id: string): Promise<void> {
 /**
  * Get all projects from all users for admin
  * Joins with profiles to get user information
+ * Note: After separation, templates are in separate table
  */
 export async function getAdminProjects() {
   const supabase = await createClient()
@@ -908,8 +894,6 @@ export async function getAdminProjects() {
     throw new Error("Unauthorized")
   }
 
-  // After migration, projects.user_id now references profiles.id
-  // This allows Supabase's automatic JOIN to work
   const { data, error } = await supabase
     .from("projects")
     .select(`
@@ -919,6 +903,11 @@ export async function getAdminProjects() {
         first_name,
         last_name,
         email
+      ),
+      template:templates (
+        id,
+        slug,
+        title
       )
     `)
     .order("last_edited_at", { ascending: false })

@@ -170,40 +170,74 @@ CREATE TRIGGER handle_waitlist_updated_at
   EXECUTE FUNCTION handle_updated_at();
 
 -- ============================================
--- SECTION 4: PROJECTS TABLE
+-- SECTION 4: TEMPLATES TABLE
 -- ============================================
--- Unified table for both user projects and admin templates
--- is_template = FALSE: User-created photobook projects (private)
--- is_template = TRUE: Admin-created templates (public blueprints)
+-- Admin-created photobook templates (public blueprints)
+
+CREATE TABLE IF NOT EXISTS public.templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug VARCHAR(100) NOT NULL UNIQUE,
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  category_id UUID REFERENCES public.template_categories(id) ON DELETE SET NULL,
+  thumbnail_url TEXT,
+  preview_images JSONB, -- JSON array of preview image URLs
+  is_featured BOOLEAN DEFAULT FALSE,
+  is_premium BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  page_count INT CHECK (page_count IN (30, 40)),
+  paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_templates_slug ON public.templates(slug);
+CREATE INDEX IF NOT EXISTS idx_templates_category ON public.templates(category_id);
+CREATE INDEX IF NOT EXISTS idx_templates_featured ON public.templates(is_featured) WHERE is_featured = TRUE;
+CREATE INDEX IF NOT EXISTS idx_templates_active ON public.templates(is_active) WHERE is_active = TRUE;
+
+-- Enable RLS
+ALTER TABLE public.templates ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies
+DROP POLICY IF EXISTS "Anyone can view active templates" ON public.templates;
+CREATE POLICY "Anyone can view active templates"
+  ON public.templates FOR SELECT
+  TO authenticated
+  USING (is_active = TRUE);
+
+DROP POLICY IF EXISTS "Admins can manage templates" ON public.templates;
+CREATE POLICY "Admins can manage templates"
+  ON public.templates FOR ALL
+  TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  ));
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS on_template_updated ON public.templates;
+CREATE TRIGGER on_template_updated
+  BEFORE UPDATE ON public.templates
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_updated_at();
+
+-- ============================================
+-- SECTION 5: PROJECTS TABLE
+-- ============================================
+-- User-created photobook projects (private)
 
 CREATE TABLE IF NOT EXISTS public.projects (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE, -- NULL for templates
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   title VARCHAR(255) NOT NULL DEFAULT 'Untitled Project',
   cover_photo_url TEXT,
   status VARCHAR(50) DEFAULT 'draft' CHECK (status IN ('draft', 'processed', 'shipped', 'completed')),
-
-  -- Template/Project distinction
-  is_template BOOLEAN DEFAULT FALSE,
-
-  -- Template-specific fields (NULL for user projects)
-  slug VARCHAR(100) UNIQUE, -- URL-friendly slug for templates (e.g., 'vacation-memories')
-  description TEXT, -- Template description shown in template browser
-  category_id UUID REFERENCES public.template_categories(id) ON DELETE SET NULL, -- Template category
-  thumbnail_url TEXT, -- Template thumbnail image URL
-  preview_images JSONB, -- JSON array of template preview image URLs
-  is_featured BOOLEAN DEFAULT FALSE, -- TRUE if template should appear in featured section
-  is_premium BOOLEAN DEFAULT FALSE, -- TRUE if template requires payment
-  is_active BOOLEAN DEFAULT TRUE, -- Controls template visibility to users
-
-  -- Product configuration
+  template_id UUID REFERENCES public.templates(id) ON DELETE SET NULL, -- Track template origin
   page_count INT CHECK (page_count IN (30, 40)),
   paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only')),
-
-  -- Voucher (projects only)
   voucher_code VARCHAR(50),
-
-  -- Metadata
   last_edited_at TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -212,49 +246,35 @@ CREATE TABLE IF NOT EXISTS public.projects (
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_projects_user_id ON public.projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_projects_last_edited ON public.projects(user_id, last_edited_at DESC);
+CREATE INDEX IF NOT EXISTS idx_projects_template_id ON public.projects(template_id);
 
 -- Enable RLS
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
--- Templates are publicly readable, projects are private to owner
 DROP POLICY IF EXISTS "Users can view own projects" ON public.projects;
-DROP POLICY IF EXISTS "Users can view templates or own projects" ON public.projects;
-CREATE POLICY "Users can view templates or own projects"
+CREATE POLICY "Users can view own projects"
   ON public.projects FOR SELECT
   TO authenticated
-  USING (is_template = TRUE OR user_id = auth.uid());
+  USING (user_id = auth.uid());
 
--- Users can only create their own projects (not templates)
 DROP POLICY IF EXISTS "Users can insert own projects" ON public.projects;
 CREATE POLICY "Users can insert own projects"
   ON public.projects FOR INSERT
   TO authenticated
-  WITH CHECK (user_id = auth.uid() AND is_template = FALSE);
+  WITH CHECK (user_id = auth.uid());
 
--- Users can only update their own projects (not templates)
 DROP POLICY IF EXISTS "Users can update own projects" ON public.projects;
 CREATE POLICY "Users can update own projects"
   ON public.projects FOR UPDATE
   TO authenticated
-  USING (user_id = auth.uid() AND is_template = FALSE);
+  USING (user_id = auth.uid());
 
--- Users can only delete their own projects (not templates)
 DROP POLICY IF EXISTS "Users can delete own projects" ON public.projects;
 CREATE POLICY "Users can delete own projects"
   ON public.projects FOR DELETE
   TO authenticated
-  USING (user_id = auth.uid() AND is_template = FALSE);
-
--- Admins can manage templates
-DROP POLICY IF EXISTS "Admins can manage templates" ON public.projects;
-CREATE POLICY "Admins can manage templates"
-  ON public.projects FOR ALL
-  TO authenticated
-  USING (
-    is_template = TRUE AND
-    EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE)
-  );
+  USING (user_id = auth.uid());
 
 -- Trigger for updated_at
 DROP TRIGGER IF EXISTS on_project_updated ON public.projects;
@@ -263,99 +283,105 @@ CREATE TRIGGER on_project_updated
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_updated_at();
 
+COMMENT ON COLUMN public.projects.template_id IS
+  'Optional reference to the template this project was created from (NULL for blank projects)';
+
 -- ============================================
--- SECTION 5: PAGES TABLE
+-- SECTION 6: PAGES TABLE
 -- ============================================
--- Stores pages within projects and templates
--- Zones are copied from layouts when applied (not referenced)
+-- Stores pages within projects OR templates (mutually exclusive)
 
 CREATE TABLE IF NOT EXISTS public.pages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE,
+  template_id UUID REFERENCES public.templates(id) ON DELETE CASCADE,
   page_number INT NOT NULL,
   title VARCHAR(255),
-  is_template BOOLEAN DEFAULT FALSE, -- Inherited from parent project
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(project_id, page_number)
+  UNIQUE(project_id, page_number),
+  UNIQUE(template_id, page_number),
+  CHECK (
+    (project_id IS NOT NULL AND template_id IS NULL) OR
+    (template_id IS NOT NULL AND project_id IS NULL)
+  )
 );
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_pages_project_id ON public.pages(project_id, page_number);
+CREATE INDEX IF NOT EXISTS idx_pages_template_id ON public.pages(template_id, page_number);
 
 -- Enable RLS
 ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies (inherit from project ownership, allow public read for template pages)
-DROP POLICY IF EXISTS "Users can view own pages" ON public.pages;
-DROP POLICY IF EXISTS "Users can view template pages or own pages" ON public.pages;
-CREATE POLICY "Users can view template pages or own pages"
+-- RLS Policies
+DROP POLICY IF EXISTS "Users can view own or template pages" ON public.pages;
+CREATE POLICY "Users can view own or template pages"
   ON public.pages FOR SELECT
   TO authenticated
   USING (
-    is_template = TRUE OR
-    EXISTS (
+    -- Template pages are publicly viewable
+    (template_id IS NOT NULL) OR
+    -- User can view their own project pages
+    (project_id IS NOT NULL AND EXISTS (
       SELECT 1 FROM public.projects
       WHERE projects.id = pages.project_id
-        AND (projects.is_template = TRUE OR projects.user_id = auth.uid())
-    )
+      AND projects.user_id = auth.uid()
+    ))
   );
 
-DROP POLICY IF EXISTS "Users can insert own pages" ON public.pages;
-DROP POLICY IF EXISTS "Users can create pages for their own projects" ON public.pages;
-CREATE POLICY "Users can create pages for their own projects"
+DROP POLICY IF EXISTS "Users can create own or admin template pages" ON public.pages;
+CREATE POLICY "Users can create own or admin template pages"
   ON public.pages FOR INSERT
   TO authenticated
   WITH CHECK (
-    EXISTS (
+    -- Users can create pages for their own projects
+    (project_id IS NOT NULL AND EXISTS (
       SELECT 1 FROM public.projects
       WHERE projects.id = pages.project_id
-        AND (
-          projects.user_id = auth.uid() OR
-          (projects.is_template = TRUE AND EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
-          ))
-        )
-    )
+      AND projects.user_id = auth.uid()
+    )) OR
+    -- Admins can create template pages
+    (template_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+    ))
   );
 
-DROP POLICY IF EXISTS "Users can update own pages" ON public.pages;
-DROP POLICY IF EXISTS "Users can update pages in their own projects" ON public.pages;
-CREATE POLICY "Users can update pages in their own projects"
+DROP POLICY IF EXISTS "Users can update own or admin template pages" ON public.pages;
+CREATE POLICY "Users can update own or admin template pages"
   ON public.pages FOR UPDATE
   TO authenticated
   USING (
-    EXISTS (
+    -- Users can update pages in their own projects
+    (project_id IS NOT NULL AND EXISTS (
       SELECT 1 FROM public.projects
       WHERE projects.id = pages.project_id
-        AND (
-          projects.user_id = auth.uid() OR
-          (projects.is_template = TRUE AND EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
-          ))
-        )
-    )
+      AND projects.user_id = auth.uid()
+    )) OR
+    -- Admins can update template pages
+    (template_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+    ))
   );
 
-DROP POLICY IF EXISTS "Users can delete own pages" ON public.pages;
-DROP POLICY IF EXISTS "Users can delete pages from their own projects" ON public.pages;
-CREATE POLICY "Users can delete pages from their own projects"
+DROP POLICY IF EXISTS "Users can delete own or admin template pages" ON public.pages;
+CREATE POLICY "Users can delete own or admin template pages"
   ON public.pages FOR DELETE
   TO authenticated
   USING (
-    EXISTS (
+    -- Users can delete pages from their own projects
+    (project_id IS NOT NULL AND EXISTS (
       SELECT 1 FROM public.projects
       WHERE projects.id = pages.project_id
-        AND (
-          projects.user_id = auth.uid() OR
-          (projects.is_template = TRUE AND EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
-          ))
-        )
-    )
+      AND projects.user_id = auth.uid()
+    )) OR
+    -- Admins can delete template pages
+    (template_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+    ))
   );
 
 -- Trigger for updated_at
@@ -365,13 +391,16 @@ CREATE TRIGGER on_page_updated
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_updated_at();
 
--- Function to update project's last_edited_at when pages change
+-- Function to update project's last_edited_at when project pages change
 CREATE OR REPLACE FUNCTION update_project_last_edited()
 RETURNS TRIGGER AS $$
 BEGIN
-  UPDATE public.projects
-  SET last_edited_at = NOW()
-  WHERE id = NEW.project_id;
+  -- Only update if this is a project page (not a template page)
+  IF NEW.project_id IS NOT NULL THEN
+    UPDATE public.projects
+    SET last_edited_at = NOW()
+    WHERE id = NEW.project_id;
+  END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -380,6 +409,7 @@ DROP TRIGGER IF EXISTS on_page_modified ON public.pages;
 CREATE TRIGGER on_page_modified
   AFTER INSERT OR UPDATE ON public.pages
   FOR EACH ROW
+  WHEN (NEW.project_id IS NOT NULL)
   EXECUTE FUNCTION update_project_last_edited();
 
 -- ============================================

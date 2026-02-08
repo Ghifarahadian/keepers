@@ -40,7 +40,7 @@ export async function createProject(
     .insert({
       user_id: user.id,
       title: input?.title || "Untitled Project",
-      is_template: false, // User projects are never templates
+      template_id: input?.template_id || null,
       page_count: input?.page_count || 30,
       paper_size: input?.paper_size || 'A4',
       voucher_code: input?.voucher_code || null,
@@ -73,14 +73,14 @@ export async function createProject(
 
     pagesToCreate.push({
       project_id: project.id,
+      template_id: null,
       page_number: leftPageNumber,
-      is_template: false,
     })
 
     pagesToCreate.push({
       project_id: project.id,
+      template_id: null,
       page_number: rightPageNumber,
-      is_template: false,
     })
   }
 
@@ -123,7 +123,7 @@ export async function getProject(projectId: string): Promise<Project | null> {
       *,
       pages (
         *,
-        zones!zones_page_id_fkey (*),
+        zones:page_zones (*),
         elements (*)
       )
     `
@@ -286,10 +286,10 @@ export async function createPage(input: CreatePageInput): Promise<Page> {
   const { data: page, error } = await supabase
     .from("pages")
     .insert({
-      project_id: input.project_id,
+      project_id: input.project_id || null,
+      template_id: input.template_id || null,
       page_number: input.page_number,
       title: input.title,
-      is_template: input.is_template || false,
     })
     .select()
     .single()
@@ -379,24 +379,50 @@ export async function createZone(input: CreateZoneInput): Promise<PageZone> {
     throw new Error("Unauthorized")
   }
 
-  const { data: zone, error } = await supabase
-    .from("zones")
-    .insert({
-      page_id: input.page_id || null,
-      layout_id: input.layout_id || null,
-      zone_index: input.zone_index,
-      position_x: input.position_x,
-      position_y: input.position_y,
-      width: input.width,
-      height: input.height,
-      zone_type: input.zone_type || null,
-    })
-    .select()
-    .single()
+  // Determine which table to use based on input
+  const isLayoutZone = input.layout_id !== undefined && input.layout_id !== null
+  const isPageZone = input.page_id !== undefined && input.page_id !== null
 
-  if (error) throw error
+  if (!isLayoutZone && !isPageZone) {
+    throw new Error("Either page_id or layout_id must be provided")
+  }
 
-  return zone as PageZone
+  if (isLayoutZone) {
+    // Create layout zone
+    const { data: zone, error } = await supabase
+      .from("layout_zones")
+      .insert({
+        layout_id: input.layout_id,
+        zone_index: input.zone_index,
+        zone_type: input.zone_type || 'photo',
+        position_x: input.position_x,
+        position_y: input.position_y,
+        width: input.width,
+        height: input.height,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return zone as PageZone
+  } else {
+    // Create page zone
+    const { data: zone, error } = await supabase
+      .from("page_zones")
+      .insert({
+        page_id: input.page_id,
+        zone_index: input.zone_index,
+        position_x: input.position_x,
+        position_y: input.position_y,
+        width: input.width,
+        height: input.height,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return zone as PageZone
+  }
 }
 
 export async function updateZone(
@@ -412,8 +438,9 @@ export async function updateZone(
     throw new Error("Unauthorized")
   }
 
+  // Update page zone (editor-facing zones)
   const { error } = await supabase
-    .from("zones")
+    .from("page_zones")
     .update(updates)
     .eq("id", zoneId)
 
@@ -430,7 +457,8 @@ export async function deleteZone(zoneId: string): Promise<void> {
     throw new Error("Unauthorized")
   }
 
-  const { error } = await supabase.from("zones").delete().eq("id", zoneId)
+  // Delete page zone (editor-facing zones)
+  const { error } = await supabase.from("page_zones").delete().eq("id", zoneId)
 
   if (error) throw error
 }

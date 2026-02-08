@@ -1,17 +1,17 @@
 // ============================================
-// KEEPERS Layout & Category Type Definitions
+// KEEPERS Template & Layout Type Definitions
 // ============================================
-// NOTE: Templates have been merged into the Project type (see types/editor.ts)
-// This file now contains:
+// This file contains:
+// - Template types (Template, TemplateDB)
 // - Layout system types (LayoutDB, LayoutZoneDB)
 // - Template category types (TemplateCategory)
-// - Admin types (AdminProject, AdminProfile)
+// - Admin types (AdminProfile)
 
 // ============================================
 // DATABASE TYPES (from Supabase tables)
 // ============================================
 
-import type { Zone } from './editor'
+import type { Zone, Page, PaperSize, PageCount } from './editor'
 
 export interface LayoutDB {
   id: string
@@ -45,12 +45,28 @@ export interface TemplateCategory {
 }
 
 // ============================================
-// NOTE: Templates have been merged into Project type
+// TEMPLATE TYPES
 // ============================================
-// Templates are now projects with is_template=TRUE
-// See types/editor.ts for the unified Project interface
-// Template pages are now pages with is_template=TRUE
-// See types/editor.ts for the unified Page interface
+// Templates are now separate from projects (admin-managed blueprints)
+
+export interface Template {
+  id: string
+  slug: string
+  title: string
+  description: string | null
+  category_id: string | null
+  category?: TemplateCategory | null // Joined from template_categories
+  thumbnail_url: string | null
+  preview_images: string[] | null // JSONB array
+  is_featured: boolean
+  is_premium: boolean
+  is_active: boolean
+  page_count: PageCount | null
+  paper_size: PaperSize | null
+  created_at: string
+  updated_at: string
+  pages?: Page[] // Template pages (pages with template_id set)
+}
 
 // ============================================
 // INPUT TYPES (for creating/updating)
@@ -101,14 +117,31 @@ export interface UpdateTemplateCategoryInput {
   sort_order?: number
 }
 
-// ============================================
-// NOTE: Template input types removed
-// ============================================
-// Use CreateProjectInput with is_template=true for creating templates
-// Use UpdateProjectInput for updating templates
-// Use CreatePageInput with is_template=true for template pages
-// Use UpdatePageInput for updating template pages
-// See types/editor.ts for these input types
+export interface CreateTemplateInput {
+  slug: string
+  title: string
+  description?: string
+  category_id?: string
+  thumbnail_url?: string
+  preview_images?: string[]
+  is_featured?: boolean
+  is_premium?: boolean
+  page_count?: PageCount
+  paper_size?: PaperSize
+}
+
+export interface UpdateTemplateInput {
+  title?: string
+  description?: string
+  category_id?: string
+  thumbnail_url?: string
+  preview_images?: string[]
+  is_featured?: boolean
+  is_premium?: boolean
+  is_active?: boolean
+  page_count?: PageCount
+  paper_size?: PaperSize
+}
 
 // ============================================
 // ADMIN TYPES
@@ -126,30 +159,17 @@ export interface AdminProfile {
 export interface AdminProject {
   // Core fields
   id: string
-  user_id: string | null // NULL for templates
+  user_id: string
   title: string
   cover_photo_url: string | null
   status: 'draft' | 'processed' | 'shipped' | 'completed'
-
-  // Template/Project distinction
-  is_template: boolean
-
-  // Template-specific fields (NULL for user projects)
-  slug?: string | null
-  description?: string | null
-  category_id?: string | null
-  category?: { id: string; slug: string; name: string; description?: string | null } | null // Joined from template_categories
-  thumbnail_url?: string | null
-  preview_images?: string[] | null
-  is_featured?: boolean
-  is_premium?: boolean
-  is_active?: boolean
+  template_id: string | null // References templates.id
 
   // Product configuration
-  page_count: number | null
-  paper_size: string | null
+  page_count: PageCount | null
+  paper_size: PaperSize | null
 
-  // Voucher (projects only)
+  // Voucher
   voucher_code: string | null
 
   // Metadata
@@ -157,11 +177,18 @@ export interface AdminProject {
   created_at: string
   updated_at: string
 
-  // Joined user profile data (NULL for templates)
+  // Joined user profile data
   user: {
     id: string
     first_name: string | null
     last_name: string | null
     email: string | null
+  }
+
+  // Joined template data (if project was created from template)
+  template?: {
+    id: string
+    slug: string
+    title: string
   } | null
 }

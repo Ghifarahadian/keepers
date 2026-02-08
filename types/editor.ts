@@ -22,30 +22,17 @@ export type TextDecoration = 'none' | 'underline'
 
 export interface Project {
   id: string
-  user_id: string | null // NULL for templates
+  user_id: string
   title: string
   cover_photo_url?: string | null
   status: ProjectStatus
-
-  // Template/Project distinction
-  is_template: boolean
-
-  // Template-specific fields (NULL for user projects)
-  slug?: string | null
-  description?: string | null
-  category_id?: string | null
-  category?: { id: string; slug: string; name: string; description?: string | null } | null // Joined from template_categories
-  thumbnail_url?: string | null
-  preview_images?: string[] | null
-  is_featured?: boolean
-  is_premium?: boolean
-  is_active?: boolean
+  template_id?: string | null // References templates.id (NULL for blank projects)
 
   // Product configuration
   page_count?: PageCount | null
   paper_size?: PaperSize | null
 
-  // Voucher (projects only)
+  // Voucher
   voucher_code?: string | null
 
   // Metadata
@@ -57,10 +44,10 @@ export interface Project {
 
 export interface Page {
   id: string
-  project_id: string
+  project_id: string | null // NULL for template pages
+  template_id: string | null // Set for template pages, NULL for project pages
   page_number: number
   title?: string | null
-  is_template: boolean // Inherited from parent project
   created_at: string
   updated_at: string
   zones?: Zone[]
@@ -191,13 +178,10 @@ export type EditorAction =
 
 export interface CreateProjectInput {
   title?: string
-  is_template?: boolean // Defaults to false
-  slug?: string // For templates
-  description?: string // For templates
-  category_id?: string // For templates
+  template_id?: string // Optional: create from template
   page_count?: PageCount
   paper_size?: PaperSize
-  voucher_code?: string // For user projects
+  voucher_code?: string
 }
 
 export interface UpdateProjectInput {
@@ -210,10 +194,10 @@ export interface UpdateProjectInput {
 }
 
 export interface CreatePageInput {
-  project_id: string
+  project_id?: string // Required for project pages
+  template_id?: string // Required for template pages
   page_number: number
   title?: string
-  is_template?: boolean // Defaults to false
 }
 
 export interface UpdatePageInput {
