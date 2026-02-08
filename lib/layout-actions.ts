@@ -1,7 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import type { Layout, LayoutZone } from "@/types/editor"
+import type { Layout, LayoutZone, Zone } from "@/types/editor"
 import type { LayoutDB } from "@/types/template"
 
 // ============================================
@@ -19,7 +19,7 @@ export async function getLayouts(): Promise<Layout[]> {
     .from("layouts")
     .select(`
       *,
-      layout_zones (*)
+      zones!zones_layout_id_fkey (*)
     `)
     .eq("is_active", true)
     .order("sort_order")
@@ -30,18 +30,15 @@ export async function getLayouts(): Promise<Layout[]> {
   }
 
   // Transform to Layout format (using slug as id for backward compatibility)
-  return layouts.map((l: LayoutDB & { layout_zones: Array<{ zone_index: number; zone_type?: "photo" | "text"; position_x: number; position_y: number; width: number; height: number }> }) => ({
+  return layouts.map((l: LayoutDB) => ({
     id: l.slug, // Use slug as ID for backward compatibility with existing pages
     name: l.name,
     description: l.description || "",
     icon: l.icon || undefined,
-    zones: l.layout_zones
+    zones: (l.zones || [])
       .sort((a, b) => a.zone_index - b.zone_index)
-      .map((z) => ({
-        position_x: z.position_x,
-        position_y: z.position_y,
-        width: z.width,
-        height: z.height,
+      .map((z: Zone) => ({
+        ...z,
         zone_type: z.zone_type || "photo",
       })),
   }))
@@ -57,7 +54,7 @@ export async function getLayoutBySlug(slug: string): Promise<Layout | null> {
     .from("layouts")
     .select(`
       *,
-      layout_zones (*)
+      zones!zones_layout_id_fkey (*)
     `)
     .eq("slug", slug)
     .eq("is_active", true)
@@ -70,13 +67,10 @@ export async function getLayoutBySlug(slug: string): Promise<Layout | null> {
     name: data.name,
     description: data.description || "",
     icon: data.icon || undefined,
-    zones: data.layout_zones
-      .sort((a: { zone_index: number }, b: { zone_index: number }) => a.zone_index - b.zone_index)
-      .map((z: { zone_type?: "photo" | "text"; position_x: number; position_y: number; width: number; height: number }) => ({
-        position_x: z.position_x,
-        position_y: z.position_y,
-        width: z.width,
-        height: z.height,
+    zones: (data.zones || [])
+      .sort((a: Zone, b: Zone) => a.zone_index - b.zone_index)
+      .map((z: Zone) => ({
+        ...z,
         zone_type: z.zone_type || "photo",
       })),
   }
@@ -92,7 +86,7 @@ export async function getLayoutDBBySlug(slug: string): Promise<LayoutDB | null> 
     .from("layouts")
     .select(`
       *,
-      layout_zones (*)
+      zones!zones_layout_id_fkey (*)
     `)
     .eq("slug", slug)
     .eq("is_active", true)
@@ -114,7 +108,7 @@ export async function getLayoutsDB(): Promise<LayoutDB[]> {
     .from("layouts")
     .select(`
       *,
-      layout_zones (*)
+      zones!zones_layout_id_fkey (*)
     `)
     .order("sort_order")
 

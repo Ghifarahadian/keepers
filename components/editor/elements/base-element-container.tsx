@@ -22,6 +22,7 @@ const HANDLE_POSITION_CLASSES: Record<ResizeHandle, string> = {
 
 export interface BaseElementContainerProps {
   element: Element
+  zoneId: string
   children: React.ReactNode
   toolbarActions: ToolbarAction[]
   borderColor: string
@@ -41,6 +42,7 @@ export interface BaseElementContainerProps {
 
 export function BaseElementContainer({
   element,
+  zoneId,
   children,
   toolbarActions,
   borderColor,
@@ -76,8 +78,9 @@ export function BaseElementContainer({
       e.stopPropagation()
       e.preventDefault()
 
-      const canvas = (e.target as HTMLElement).closest('[data-canvas]') as HTMLElement
-      if (!canvas) return
+      // Find the zone element (parent of this element)
+      const zoneElement = document.querySelector(`[data-zone-id="${zoneId}"]`) as HTMLElement
+      if (!zoneElement) return
 
       isDragging.current = true
       setDragging(true)
@@ -98,12 +101,14 @@ export function BaseElementContainer({
       const handleMouseMove = (moveEvent: MouseEvent) => {
         if (!isDragging.current || !containerRef.current) return
 
-        const canvasRect = canvas.getBoundingClientRect()
-        const deltaX = ((moveEvent.clientX - dragStart.current.x) / canvasRect.width) * 100
-        const deltaY = ((moveEvent.clientY - dragStart.current.y) / canvasRect.height) * 100
+        // Calculate delta relative to ZONE size (not canvas)
+        const zoneRect = zoneElement.getBoundingClientRect()
+        const deltaX = ((moveEvent.clientX - dragStart.current.x) / zoneRect.width) * 100
+        const deltaY = ((moveEvent.clientY - dragStart.current.y) / zoneRect.height) * 100
 
-        const newX = Math.max(0, Math.min(100 - element.width, startPosition.current.x + deltaX))
-        const newY = Math.max(0, Math.min(100 - element.height, startPosition.current.y + deltaY))
+        // Allow negative positions and >100% for cropping/panning
+        const newX = startPosition.current.x + deltaX
+        const newY = startPosition.current.y + deltaY
 
         currentPosition.current = { ...currentPosition.current, x: newX, y: newY }
 
@@ -132,7 +137,7 @@ export function BaseElementContainer({
 
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
-    }, [element, isDragDisabled, selectElement, updateElementPosition, setDragging])
+    }, [element, isDragDisabled, selectElement, updateElementPosition, setDragging, zoneId])
 
     const handleResizeMouseDown = useCallback((e: React.MouseEvent, handle: ResizeHandle) => {
       if (!containerRef.current) return
@@ -140,8 +145,9 @@ export function BaseElementContainer({
       e.stopPropagation()
       e.preventDefault()
 
-      const canvas = (e.target as HTMLElement).closest('[data-canvas]') as HTMLElement
-      if (!canvas) return
+      // Find the zone element (parent of this element)
+      const zoneElement = document.querySelector(`[data-zone-id="${zoneId}"]`) as HTMLElement
+      if (!zoneElement) return
 
       isResizing.current = handle
       setDragging(true)
@@ -160,9 +166,10 @@ export function BaseElementContainer({
       const handleMouseMove = (moveEvent: MouseEvent) => {
         if (!isResizing.current || !containerRef.current) return
 
-        const canvasRect = canvas.getBoundingClientRect()
-        const deltaX = ((moveEvent.clientX - dragStart.current.x) / canvasRect.width) * 100
-        const deltaY = ((moveEvent.clientY - dragStart.current.y) / canvasRect.height) * 100
+        // Calculate delta relative to ZONE size (not canvas)
+        const zoneRect = zoneElement.getBoundingClientRect()
+        const deltaX = ((moveEvent.clientX - dragStart.current.x) / zoneRect.width) * 100
+        const deltaY = ((moveEvent.clientY - dragStart.current.y) / zoneRect.height) * 100
 
         let { x, y, width, height } = startPosition.current
         const minSize = 10
@@ -187,7 +194,7 @@ export function BaseElementContainer({
             x += deltaX; width -= deltaX; break
         }
 
-        // Enforce minimum size
+        // Enforce minimum size (but allow >100% for cropping)
         if (width < minSize) {
           if (['top-left', 'bottom-left', 'left'].includes(isResizing.current)) {
             x = startPosition.current.x + startPosition.current.width - minSize
@@ -201,11 +208,7 @@ export function BaseElementContainer({
           height = minSize
         }
 
-        // Clamp to canvas bounds
-        x = Math.max(0, Math.min(100 - width, x))
-        y = Math.max(0, Math.min(100 - height, y))
-        width = Math.min(100 - x, width)
-        height = Math.min(100 - y, height)
+        // NO clamping to bounds - allow negative positions and >100% sizes for cropping
 
         currentPosition.current = { x, y, width, height }
 
@@ -238,7 +241,7 @@ export function BaseElementContainer({
 
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
-    }, [element, updateElementPosition, setDragging])
+    }, [element, updateElementPosition, setDragging, zoneId])
 
     // Combine internal and external refs
     const setRef = useCallback((node: HTMLDivElement | null) => {

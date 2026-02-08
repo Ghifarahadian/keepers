@@ -1,24 +1,25 @@
 "use client"
 
 import { useEditor } from "@/lib/contexts/editor-context"
-import { PictureContainer } from "./elements/picture-container"
-import { TextContainer } from "./elements/text-container"
+import { ZoneContainer } from "./elements/zone-container"
 import { useDroppable } from "@dnd-kit/core"
 import type { Page } from "@/types/editor"
 
 // Individual page component within the spread
 function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' }) {
-  const { state, selectElement, setActivePageSide } = useEditor()
+  const { state, selectElement, selectZone, setActivePageSide } = useEditor()
   const { setNodeRef } = useDroppable({
     id: page ? `canvas-${side}` : `canvas-${side}-empty`,
     data: { pageId: page?.id, side }
   })
 
+  const zones = page ? (state.zones[page.id] || []) : []
   const elements = page ? (state.elements[page.id] || []) : []
   const isActive = state.activePageSide === side
 
   const handleClick = () => {
     selectElement(null)
+    selectZone(null)
     setActivePageSide(side)
   }
 
@@ -38,14 +39,18 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
       }}
     >
       {page ? (
-        // Render elements for this page
-        elements.map((element) => {
-          if (element.type === 'photo') {
-            return <PictureContainer key={element.id} element={element} />
-          } else if (element.type === 'text') {
-            return <TextContainer key={element.id} element={element} />
-          }
-          return null
+        // Render zones (which contain elements)
+        zones.map((zone) => {
+          // Find elements that belong to this zone
+          const zoneElements = elements.filter(el => el.zone_index === zone.zone_index)
+          return (
+            <ZoneContainer
+              key={zone.id}
+              zone={zone}
+              pageId={page.id}
+              elements={zoneElements}
+            />
+          )
         })
       ) : (
         // Empty page placeholder

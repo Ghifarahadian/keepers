@@ -1,10 +1,17 @@
 // ============================================
-// KEEPERS Template System Type Definitions
+// KEEPERS Layout & Category Type Definitions
 // ============================================
+// NOTE: Templates have been merged into the Project type (see types/editor.ts)
+// This file now contains:
+// - Layout system types (LayoutDB, LayoutZoneDB)
+// - Template category types (TemplateCategory)
+// - Admin types (AdminProject, AdminProfile)
 
 // ============================================
 // DATABASE TYPES (from Supabase tables)
 // ============================================
+
+import type { Zone } from './editor'
 
 export interface LayoutDB {
   id: string
@@ -18,21 +25,12 @@ export interface LayoutDB {
   sort_order: number
   created_at: string
   updated_at: string
-  layout_zones?: LayoutZoneDB[]
+  zones?: Zone[] // Now uses unified Zone type (zones with layout_id set)
 }
 
-export interface LayoutZoneDB {
-  id: string
-  layout_id: string
-  zone_index: number
-  zone_type: "photo" | "text"
-  position_x: number
-  position_y: number
-  width: number
-  height: number
-  created_at: string
-  updated_at: string
-}
+// Legacy type alias - layout zones are now just zones with layout_id set
+// This is kept for backwards compatibility
+export type LayoutZoneDB = Zone
 
 export interface TemplateCategory {
   id: string
@@ -46,58 +44,13 @@ export interface TemplateCategory {
   updated_at: string
 }
 
-export interface Template {
-  id: string
-  slug: string
-  name: string
-  description: string | null
-  category_id: string | null
-  category?: TemplateCategory | null
-  thumbnail_url: string | null
-  preview_images: string[]
-  page_count: number
-  is_featured: boolean
-  is_premium: boolean
-  is_active: boolean
-  sort_order: number
-  created_by: string | null
-  created_at: string
-  updated_at: string
-  template_pages?: TemplatePage[]
-}
-
-export interface TemplatePage {
-  id: string
-  template_id: string
-  page_number: number
-  layout_id: string | null
-  layout?: LayoutDB | null
-  title: string | null
-  created_at: string
-  updated_at: string
-  template_elements?: TemplateElement[]
-}
-
-export interface TemplateElement {
-  id: string
-  template_page_id: string
-  type: 'text' | 'decoration'
-  text_content: string | null
-  font_family: string | null
-  font_size: number | null
-  font_color: string | null
-  font_weight: string | null
-  font_style: string | null
-  text_align: string | null
-  position_x: number
-  position_y: number
-  width: number
-  height: number
-  rotation: number
-  z_index: number
-  created_at: string
-  updated_at: string
-}
+// ============================================
+// NOTE: Templates have been merged into Project type
+// ============================================
+// Templates are now projects with is_template=TRUE
+// See types/editor.ts for the unified Project interface
+// Template pages are now pages with is_template=TRUE
+// See types/editor.ts for the unified Page interface
 
 // ============================================
 // INPUT TYPES (for creating/updating)
@@ -148,60 +101,14 @@ export interface UpdateTemplateCategoryInput {
   sort_order?: number
 }
 
-export interface CreateTemplateInput {
-  slug: string
-  name: string
-  description?: string
-  category_id?: string
-  thumbnail_url?: string
-  pages: Array<{
-    page_number: number
-    layout_slug: string
-    title?: string
-  }>
-}
-
-export interface UpdateTemplateInput {
-  name?: string
-  description?: string
-  category_id?: string | null
-  thumbnail_url?: string | null
-  preview_images?: string[]
-  is_featured?: boolean
-  is_premium?: boolean
-  is_active?: boolean
-  sort_order?: number
-}
-
-export interface CreateTemplatePageInput {
-  template_id: string
-  page_number: number
-  layout_id?: string
-  title?: string
-}
-
-export interface UpdateTemplatePageInput {
-  layout_id?: string | null
-  title?: string | null
-}
-
-export interface CreateTemplateElementInput {
-  template_page_id: string
-  type: 'text' | 'decoration'
-  text_content?: string
-  font_family?: string
-  font_size?: number
-  font_color?: string
-  font_weight?: string
-  font_style?: string
-  text_align?: string
-  position_x: number
-  position_y: number
-  width: number
-  height: number
-  rotation?: number
-  z_index?: number
-}
+// ============================================
+// NOTE: Template input types removed
+// ============================================
+// Use CreateProjectInput with is_template=true for creating templates
+// Use UpdateProjectInput for updating templates
+// Use CreatePageInput with is_template=true for template pages
+// Use UpdatePageInput for updating template pages
+// See types/editor.ts for these input types
 
 // ============================================
 // ADMIN TYPES
@@ -214,4 +121,47 @@ export interface AdminProfile {
   is_admin: boolean
   created_at: string
   updated_at: string
+}
+
+export interface AdminProject {
+  // Core fields
+  id: string
+  user_id: string | null // NULL for templates
+  title: string
+  cover_photo_url: string | null
+  status: 'draft' | 'processed' | 'shipped' | 'completed'
+
+  // Template/Project distinction
+  is_template: boolean
+
+  // Template-specific fields (NULL for user projects)
+  slug?: string | null
+  description?: string | null
+  category_id?: string | null
+  category?: { id: string; slug: string; name: string; description?: string | null } | null // Joined from template_categories
+  thumbnail_url?: string | null
+  preview_images?: string[] | null
+  is_featured?: boolean
+  is_premium?: boolean
+  is_active?: boolean
+
+  // Product configuration
+  page_count: number | null
+  paper_size: string | null
+
+  // Voucher (projects only)
+  voucher_code: string | null
+
+  // Metadata
+  last_edited_at: string
+  created_at: string
+  updated_at: string
+
+  // Joined user profile data (NULL for templates)
+  user: {
+    id: string
+    first_name: string | null
+    last_name: string | null
+    email: string | null
+  } | null
 }

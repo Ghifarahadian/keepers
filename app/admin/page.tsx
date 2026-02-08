@@ -175,7 +175,7 @@ export default async function AdminDashboard() {
                   className="text-sm"
                   style={{ color: "var(--color-secondary)" }}
                 >
-                  {layout.layout_zones?.length || 0} zones
+                  {layout.zones?.length || 0} zones
                 </p>
               </div>
               <span

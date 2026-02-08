@@ -9,9 +9,10 @@ import { TextToolbar } from "../ui/text-toolbar"
 
 interface TextContainerProps {
   element: Element
+  zoneId: string
 }
 
-export function TextContainer({ element }: TextContainerProps) {
+export function TextContainer({ element, zoneId }: TextContainerProps) {
   const { state, deleteElementFromCanvas, updateElementPosition } = useEditor()
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -77,6 +78,7 @@ export function TextContainer({ element }: TextContainerProps) {
   return (
     <BaseElementContainer
       element={element}
+      zoneId={zoneId}
       toolbarActions={[]}
       borderColor={borderColor}
       backgroundColor={bgColor}

@@ -3,13 +3,14 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createTemplate, updateTemplate, getAdminCategories, getAdminLayouts } from "@/lib/admin-actions"
-import type { Template, TemplateCategory, LayoutDB, CreateTemplateInput, UpdateTemplateInput } from "@/types/template"
+import type { Project } from "@/types/editor"
+import type { TemplateCategory, LayoutDB } from "@/types/template"
 import { PageBuilder } from "./page-builder"
 import { Loader2, Save, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 interface TemplateFormProps {
-  template?: Template
+  template?: Project
   isEdit?: boolean
 }
 
@@ -26,7 +27,7 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [layouts, setLayouts] = useState<LayoutDB[]>([])
 
-  const [name, setName] = useState(template?.name || "")
+  const [title, setTitle] = useState(template?.title || "")
   const [slug, setSlug] = useState(template?.slug || "")
   const [description, setDescription] = useState(template?.description || "")
   const [categoryId, setCategoryId] = useState(template?.category_id || "")
@@ -34,9 +35,9 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
   const [isFeatured, setIsFeatured] = useState(template?.is_featured ?? false)
   const [isActive, setIsActive] = useState(template?.is_active ?? true)
   const [pages, setPages] = useState<PageInput[]>(
-    template?.template_pages?.map((p) => ({
+    template?.pages?.map((p) => ({
       page_number: p.page_number,
-      layout_slug: p.layout?.slug || "blank",
+      layout_slug: "blank", // Default to blank since we can't determine layout from zones
       title: p.title || undefined,
     })) || [
       { page_number: 1, layout_slug: "blank" },
@@ -63,27 +64,25 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
 
     try {
       if (isEdit && template) {
-        const input: UpdateTemplateInput = {
-          name,
+        await updateTemplate(template.id, {
+          title,
           description: description || undefined,
-          category_id: categoryId || null,
-          thumbnail_url: thumbnailUrl || null,
+          category_id: categoryId || undefined,
+          thumbnail_url: thumbnailUrl || undefined,
           is_featured: isFeatured,
           is_active: isActive,
-        }
-        await updateTemplate(template.id, input)
+        })
         router.push("/admin/templates")
         router.refresh()
       } else {
-        const input: CreateTemplateInput = {
+        await createTemplate({
           slug,
-          name,
+          title,
           description: description || undefined,
           category_id: categoryId || undefined,
           thumbnail_url: thumbnailUrl || undefined,
           pages,
-        }
-        await createTemplate(input)
+        })
         router.push("/admin/templates")
         router.refresh()
       }
@@ -96,7 +95,7 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
   }
 
   const generateSlug = () => {
-    const generatedSlug = name
+    const generatedSlug = title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
@@ -124,7 +123,7 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
         </h1>
         <button
           type="submit"
-          disabled={isSubmitting || !name || (!isEdit && !slug)}
+          disabled={isSubmitting || !title || (!isEdit && !slug)}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           style={{ backgroundColor: "var(--color-accent)" }}
         >
@@ -175,12 +174,12 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
                 className="block text-sm font-medium mb-1"
                 style={{ color: "var(--color-neutral)" }}
               >
-                Name *
+                Title *
               </label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
                 onBlur={() => !isEdit && !slug && generateSlug()}
                 className="w-full px-4 py-2 rounded-lg border"
                 style={{ borderColor: "var(--color-border)" }}

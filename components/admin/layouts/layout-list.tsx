@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Edit, Trash2 } from "lucide-react"
 import type { LayoutDB } from "@/types/template"
+import type { Zone } from "@/types/editor"
 import { deleteLayout } from "@/lib/admin-actions"
 import { useState } from "react"
 
@@ -102,7 +103,7 @@ export function LayoutList({ layouts }: LayoutListProps) {
                     borderColor: "var(--color-border)",
                   }}
                 >
-                  {layout.layout_zones?.map((zone, index) => (
+                  {layout.zones?.map((zone: Zone, index: number) => (
                     <div
                       key={index}
                       className="absolute"
@@ -147,7 +148,7 @@ export function LayoutList({ layouts }: LayoutListProps) {
               </td>
               <td className="px-6 py-4">
                 <span style={{ color: "var(--color-neutral)" }}>
-                  {layout.layout_zones?.length || 0}
+                  {layout.zones?.length || 0}
                 </span>
               </td>
               <td className="px-6 py-4">

@@ -133,16 +133,14 @@ export function EditorPagebar() {
     try {
       const nextPageNumber = state.pages.length + 1
 
-      // Create two pages at once
+      // Create two pages at once (start blank, zones added later)
       const page1 = await createPage({
         project_id: state.project.id,
         page_number: nextPageNumber,
-        layout_id: "blank",
       })
       const page2 = await createPage({
         project_id: state.project.id,
         page_number: nextPageNumber + 1,
-        layout_id: "blank",
       })
 
       dispatch({ type: "ADD_PAGE", payload: page1 })

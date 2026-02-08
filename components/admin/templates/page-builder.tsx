@@ -2,6 +2,7 @@
 
 import { Plus, Trash2, GripVertical } from "lucide-react"
 import type { LayoutDB } from "@/types/template"
+import type { Zone } from "@/types/editor"
 
 interface PageInput {
   page_number: number
@@ -40,7 +41,7 @@ export function PageBuilder({ pages, layouts, onChange, disabled }: PageBuilderP
 
   const getLayoutPreview = (layoutSlug: string) => {
     const layout = layouts.find((l) => l.slug === layoutSlug)
-    if (!layout || !layout.layout_zones) return null
+    if (!layout || !layout.zones) return null
 
     return (
       <div
@@ -50,7 +51,7 @@ export function PageBuilder({ pages, layouts, onChange, disabled }: PageBuilderP
           borderColor: "var(--color-border)",
         }}
       >
-        {layout.layout_zones.map((zone, idx) => (
+        {layout.zones.map((zone: Zone, idx: number) => (
           <div
             key={idx}
             className="absolute"
@@ -110,7 +111,7 @@ export function PageBuilder({ pages, layouts, onChange, disabled }: PageBuilderP
             >
               {layouts.map((layout) => (
                 <option key={layout.id} value={layout.slug}>
-                  {layout.name} ({layout.layout_zones?.length || 0} zones)
+                  {layout.name} ({layout.zones?.length || 0} zones)
                 </option>
               ))}
             </select>

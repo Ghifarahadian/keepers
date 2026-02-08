@@ -9,9 +9,10 @@ import { BaseElementContainer } from "./base-element-container"
 
 interface PictureContainerProps {
   element: Element
+  zoneId: string
 }
 
-export function PictureContainer({ element }: PictureContainerProps) {
+export function PictureContainer({ element, zoneId }: PictureContainerProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: `picture-${element.id}`,
     data: { type: "picture-container", element }
@@ -53,6 +54,7 @@ export function PictureContainer({ element }: PictureContainerProps) {
   return (
     <BaseElementContainer
       element={element}
+      zoneId={zoneId}
       toolbarActions={[
         ...(hasPhoto ? [{
           icon: <ImageOff size={16} />,

@@ -34,7 +34,7 @@ export function EditorTopBar() {
   }
 
   const handlePreview = () => {
-    router.push(`/editor/${state.project.id}/preview`)
+    router.push(`/preview/${state.project.id}`)
   }
 
   return (

@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from "react"
 import { useEditor } from "@/lib/contexts/editor-context"
-import { LAYOUTS, type Layout } from "@/types/editor"
-import { updatePage, deleteElement } from "@/lib/editor-actions"
+import type { Layout } from "@/types/editor"
+import { deleteElement, createZone, deleteZone } from "@/lib/editor-actions"
 import { getLayouts } from "@/lib/layout-actions"
-import { Check, Loader2 } from "lucide-react"
+import { Check, Loader2, AlertCircle } from "lucide-react"
 
 export function LayoutsPanel() {
-  const { state, dispatch, addElementToCanvas, getActivePage } = useEditor()
-  const [layouts, setLayouts] = useState<Layout[]>(LAYOUTS) // Start with static as fallback
+  const { state, dispatch, getActivePage } = useEditor()
+  const [layouts, setLayouts] = useState<Layout[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   // Fetch layouts from database
   useEffect(() => {
@@ -19,10 +20,13 @@ export function LayoutsPanel() {
         const dbLayouts = await getLayouts()
         if (dbLayouts.length > 0) {
           setLayouts(dbLayouts)
+          setError(null)
+        } else {
+          setError("No layouts available. Please contact support.")
         }
-      } catch (error) {
-        console.error("Failed to fetch layouts from database, using static fallback:", error)
-        // Keep using static LAYOUTS as fallback
+      } catch (err) {
+        console.error("Failed to fetch layouts from database:", err)
+        setError("Failed to load layouts. Please refresh the page.")
       } finally {
         setIsLoading(false)
       }
@@ -31,7 +35,27 @@ export function LayoutsPanel() {
   }, [])
 
   const currentPage = getActivePage()
-  const currentLayoutId = currentPage?.layout_id || "blank"
+
+  // Get current layout by comparing zones (no layout_id anymore)
+  const getCurrentLayoutId = (): string => {
+    if (!currentPage) return "blank"
+
+    const currentZones = state.zones[currentPage.id] || []
+    if (currentZones.length === 0) return "blank"
+
+    // Find matching layout by zone configuration
+    for (const layout of layouts) {
+      if (layout.zones.length === currentZones.length) {
+        // Simple comparison: if zone count matches, consider it the same layout
+        // (This is simplified - in production you might want more precise matching)
+        return layout.id
+      }
+    }
+
+    return "custom" // Custom layout if doesn't match any template
+  }
+
+  const currentLayoutId = getCurrentLayoutId()
 
   const handleLayoutChange = async (layoutId: string) => {
     if (!currentPage) return
@@ -41,9 +65,6 @@ export function LayoutsPanel() {
       const layout = layouts.find(l => l.id === layoutId)
       if (!layout) return
 
-      // Update the page's layout_id
-      await updatePage(currentPage.id, { layout_id: layoutId })
-
       // Delete all existing elements on this page
       const existingElements = state.elements[currentPage.id] || []
       for (const element of existingElements) {
@@ -51,25 +72,31 @@ export function LayoutsPanel() {
         dispatch({ type: "DELETE_ELEMENT", payload: { pageId: currentPage.id, elementId: element.id } })
       }
 
-      // Create elements based on layout zones (photo or text)
-      for (let i = 0; i < layout.zones.length; i++) {
-        const zone = layout.zones[i]
-        await addElementToCanvas(currentPage.id, {
-          type: zone.zone_type || "photo",
-          page_id: currentPage.id,
-          position_x: zone.position_x,
-          position_y: zone.position_y,
-          width: zone.width,
-          height: zone.height,
-          rotation: 0,
-          z_index: i,
-        })
+      // Delete all existing zones
+      const existingZones = state.zones[currentPage.id] || []
+      for (const zone of existingZones) {
+        await deleteZone(zone.id)
       }
 
-      // Update layout in state
+      // Copy zones from layout to page
+      const newZones = []
+      for (let i = 0; i < layout.zones.length; i++) {
+        const layoutZone = layout.zones[i]
+        const zone = await createZone({
+          page_id: currentPage.id,
+          zone_index: i,
+          position_x: layoutZone.position_x,
+          position_y: layoutZone.position_y,
+          width: layoutZone.width,
+          height: layoutZone.height,
+        })
+        newZones.push(zone)
+      }
+
+      // Update zones in state
       dispatch({
-        type: "UPDATE_PAGE_LAYOUT",
-        payload: { pageId: currentPage.id, layoutId },
+        type: "SET_ZONES",
+        payload: { pageId: currentPage.id, zones: newZones },
       })
     } catch (error) {
       console.error("Failed to update layout:", error)
@@ -83,6 +110,19 @@ export function LayoutsPanel() {
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-accent)' }} />
+        </div>
+      ) : error ? (
+        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-800">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-2 text-sm text-red-600 hover:text-red-700 underline"
+            >
+              Refresh page
+            </button>
+          </div>
         </div>
       ) : (
       <div className="space-y-3">

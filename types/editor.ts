@@ -8,15 +8,47 @@ export type PaperSize = 'A4' | 'A5' | 'PDF Only'
 // Page count options (centralized)
 export type PageCount = 30 | 40
 
+// Project status options (centralized)
+export type ProjectStatus = 'draft' | 'processed' | 'shipped' | 'completed'
+
+// Element/Zone type options (centralized)
+export type ElementType = 'photo' | 'text'
+
+// Font styling options (centralized)
+export type FontWeight = 'normal' | 'bold' | 'light'
+export type FontStyle = 'normal' | 'italic'
+export type TextAlign = 'left' | 'center' | 'right'
+export type TextDecoration = 'none' | 'underline'
+
 export interface Project {
   id: string
-  user_id: string
+  user_id: string | null // NULL for templates
   title: string
   cover_photo_url?: string | null
-  status: 'draft' | 'completed' | 'archived'
+  status: ProjectStatus
+
+  // Template/Project distinction
+  is_template: boolean
+
+  // Template-specific fields (NULL for user projects)
+  slug?: string | null
+  description?: string | null
+  category_id?: string | null
+  category?: { id: string; slug: string; name: string; description?: string | null } | null // Joined from template_categories
+  thumbnail_url?: string | null
+  preview_images?: string[] | null
+  is_featured?: boolean
+  is_premium?: boolean
+  is_active?: boolean
+
+  // Product configuration
   page_count?: PageCount | null
   paper_size?: PaperSize | null
+
+  // Voucher (projects only)
   voucher_code?: string | null
+
+  // Metadata
   last_edited_at: string
   created_at: string
   updated_at: string
@@ -27,17 +59,37 @@ export interface Page {
   id: string
   project_id: string
   page_number: number
-  layout_id: string
   title?: string | null
+  is_template: boolean // Inherited from parent project
   created_at: string
   updated_at: string
+  zones?: Zone[]
   elements?: Element[]
 }
+
+// Unified zone type - can belong to either a page OR a layout
+export interface Zone {
+  id: string
+  page_id: string | null // Set if this is a page zone, NULL if layout zone
+  layout_id: string | null // Set if this is a layout zone, NULL if page zone
+  zone_index: number
+  position_x: number // Position as percentage (0-100)
+  position_y: number // Position as percentage (0-100)
+  width: number // Size as percentage (0-100)
+  height: number // Size as percentage (0-100)
+  zone_type?: ElementType | null // Optional type hint (photo/text)
+  created_at: string
+  updated_at: string
+}
+
+// Alias for backwards compatibility - page zones are just zones with page_id set
+export type PageZone = Zone
 
 export interface Element {
   id: string
   page_id: string
-  type: 'photo' | 'text'
+  type: ElementType
+  zone_index: number // REQUIRED: Index of zone this element belongs to
 
   // Photo fields
   photo_url?: string | null
@@ -48,12 +100,14 @@ export interface Element {
   font_family?: string | null
   font_size?: number | null
   font_color?: string | null
-  font_weight?: 'normal' | 'bold' | 'light' | null
-  font_style?: 'normal' | 'italic' | null
-  text_align?: 'left' | 'center' | 'right' | null
-  text_decoration?: 'none' | 'underline' | null
+  font_weight?: FontWeight | null
+  font_style?: FontStyle | null
+  text_align?: TextAlign | null
+  text_decoration?: TextDecoration | null
 
-  // Layout positioning (percentages 0-100)
+  // Position/size RELATIVE TO ZONE (for cropping/zooming)
+  // - Can be negative (panned/offset from zone)
+  // - Can exceed 100% (zoomed in/cropped)
   position_x: number
   position_y: number
   width: number
@@ -73,86 +127,17 @@ export interface UploadedPhoto {
   uploaded_at: string
 }
 
-// Layout templates for creating elements
+// Layout templates for creating zones
 export interface Layout {
   id: string
   name: string
   description: string
   icon?: string
-  zones: LayoutZone[]
+  zones: Zone[] // Now uses unified Zone type instead of LayoutZone
 }
 
-export interface LayoutZone {
-  position_x: number
-  position_y: number
-  width: number
-  height: number
-  zone_type?: "photo" | "text"
-}
-
-// ============================================
-// PRE-DEFINED LAYOUTS
-// ============================================
-
-export const LAYOUTS: Layout[] = [
-  {
-    id: 'blank',
-    name: 'Blank',
-    description: 'Empty page with no photo zones',
-    zones: []
-  },
-  {
-    id: 'single',
-    name: 'Single',
-    description: 'One large photo centered',
-    zones: [
-      { position_x: 10, position_y: 10, width: 80, height: 80 }
-    ]
-  },
-  {
-    id: 'double',
-    name: 'Double',
-    description: 'Two photos side by side',
-    zones: [
-      { position_x: 5, position_y: 10, width: 42.5, height: 80 },
-      { position_x: 52.5, position_y: 10, width: 42.5, height: 80 }
-    ]
-  },
-  {
-    id: 'triple',
-    name: 'Triple',
-    description: 'One large photo with two smaller ones',
-    zones: [
-      { position_x: 5, position_y: 10, width: 60, height: 80 },
-      { position_x: 70, position_y: 10, width: 25, height: 37.5 },
-      { position_x: 70, position_y: 52.5, width: 25, height: 37.5 }
-    ]
-  },
-  {
-    id: 'grid-4',
-    name: 'Grid 4',
-    description: '2x2 grid of equal photos',
-    zones: [
-      { position_x: 5, position_y: 5, width: 42.5, height: 42.5 },
-      { position_x: 52.5, position_y: 5, width: 42.5, height: 42.5 },
-      { position_x: 5, position_y: 52.5, width: 42.5, height: 42.5 },
-      { position_x: 52.5, position_y: 52.5, width: 42.5, height: 42.5 }
-    ]
-  },
-  {
-    id: 'grid-6',
-    name: 'Grid 6',
-    description: '2x3 grid of equal photos',
-    zones: [
-      { position_x: 5, position_y: 3, width: 42.5, height: 28 },
-      { position_x: 52.5, position_y: 3, width: 42.5, height: 28 },
-      { position_x: 5, position_y: 36, width: 42.5, height: 28 },
-      { position_x: 52.5, position_y: 36, width: 42.5, height: 28 },
-      { position_x: 5, position_y: 69, width: 42.5, height: 28 },
-      { position_x: 52.5, position_y: 69, width: 42.5, height: 28 }
-    ]
-  }
-]
+// Legacy type alias - layout zones are now just zones with layout_id set
+export type LayoutZone = Zone
 
 // ============================================
 // EDITOR STATE TYPES
@@ -163,13 +148,16 @@ export interface EditorState {
   pages: Page[]
   currentSpreadIndex: number // Index of current spread (0 = pages 0-1, 1 = pages 2-3, etc.)
   activePageSide: 'left' | 'right' // Which page in the spread is active for editing
+  zones: Record<string, Zone[]> // Keyed by pageId (only page zones, layout zones not stored here)
   elements: Record<string, Element[]> // Keyed by pageId
   uploadedPhotos: UploadedPhoto[]
   selectedElementId: string | null
+  selectedZoneId: string | null // For selecting empty zones
   isSaving: boolean
   lastSaved: string | null
   error: string | null
   isDragging: boolean // True while dragging/resizing an element
+  isDraggingZone: boolean // True while dragging/resizing a zone
 }
 
 export type EditorAction =
@@ -181,18 +169,21 @@ export type EditorAction =
   | { type: 'ADD_PAGE'; payload: Page }
   | { type: 'DELETE_PAGE'; payload: string }
   | { type: 'REORDER_PAGES'; payload: Page[] }
-  | { type: 'UPDATE_PAGE_LAYOUT'; payload: { pageId: string; layoutId: string } }
+  | { type: 'SET_ZONES'; payload: { pageId: string; zones: Zone[] } }
+  | { type: 'UPDATE_ZONE'; payload: { pageId: string; zoneId: string; updates: Partial<Zone> } }
   | { type: 'SET_ELEMENTS'; payload: { pageId: string; elements: Element[] } }
   | { type: 'ADD_ELEMENT'; payload: { pageId: string; element: Element } }
   | { type: 'UPDATE_ELEMENT'; payload: { pageId: string; elementId: string; updates: Partial<Element> } }
   | { type: 'DELETE_ELEMENT'; payload: { pageId: string; elementId: string } }
   | { type: 'SELECT_ELEMENT'; payload: string | null }
+  | { type: 'SELECT_ZONE'; payload: string | null }
   | { type: 'ADD_UPLOADED_PHOTO'; payload: UploadedPhoto }
   | { type: 'REMOVE_UPLOADED_PHOTO'; payload: string }
   | { type: 'SET_SAVING'; payload: boolean }
   | { type: 'SET_LAST_SAVED'; payload: string }
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'SET_DRAGGING'; payload: boolean }
+  | { type: 'SET_DRAGGING_ZONE'; payload: boolean }
 
 // ============================================
 // FORM TYPES
@@ -200,15 +191,19 @@ export type EditorAction =
 
 export interface CreateProjectInput {
   title?: string
+  is_template?: boolean // Defaults to false
+  slug?: string // For templates
+  description?: string // For templates
+  category_id?: string // For templates
   page_count?: PageCount
   paper_size?: PaperSize
-  voucher_code?: string
+  voucher_code?: string // For user projects
 }
 
 export interface UpdateProjectInput {
   title?: string
   cover_photo_url?: string
-  status?: 'draft' | 'completed' | 'archived'
+  status?: ProjectStatus
   page_count?: PageCount
   paper_size?: PaperSize
   voucher_code?: string | null
@@ -217,51 +212,70 @@ export interface UpdateProjectInput {
 export interface CreatePageInput {
   project_id: string
   page_number: number
-  layout_id?: string
   title?: string
+  is_template?: boolean // Defaults to false
 }
 
 export interface UpdatePageInput {
-  layout_id?: string
   title?: string
+}
+
+export interface CreateZoneInput {
+  page_id?: string // Required if creating page zone
+  layout_id?: string // Required if creating layout zone
+  zone_index: number
+  position_x: number
+  position_y: number
+  width: number
+  height: number
+  zone_type?: ElementType // Optional type hint
+}
+
+export interface UpdateZoneInput {
+  position_x?: number
+  position_y?: number
+  width?: number
+  height?: number
 }
 
 export interface CreateElementInput {
   page_id: string
-  type: 'photo' | 'text'
+  type: ElementType
+  zone_index: number // REQUIRED: Zone this element belongs to
   photo_url?: string
   photo_storage_path?: string
   text_content?: string
   font_family?: string
   font_size?: number
   font_color?: string
-  font_weight?: 'normal' | 'bold' | 'light'
-  font_style?: 'normal' | 'italic'
-  text_align?: 'left' | 'center' | 'right'
-  text_decoration?: 'none' | 'underline'
-  position_x: number
-  position_y: number
-  width: number
-  height: number
+  font_weight?: FontWeight
+  font_style?: FontStyle
+  text_align?: TextAlign
+  text_decoration?: TextDecoration
+  position_x: number // Position relative to zone
+  position_y: number // Position relative to zone
+  width: number // Width relative to zone
+  height: number // Height relative to zone
   rotation?: number
   z_index?: number
 }
 
 export interface UpdateElementInput {
+  zone_index?: number // Optional: Update zone assignment
   photo_url?: string | null
   photo_storage_path?: string | null
   text_content?: string | null
   font_family?: string | null
   font_size?: number | null
   font_color?: string | null
-  font_weight?: 'normal' | 'bold' | 'light' | null
-  font_style?: 'normal' | 'italic' | null
-  text_align?: 'left' | 'center' | 'right' | null
-  text_decoration?: 'none' | 'underline' | null
-  position_x?: number
-  position_y?: number
-  width?: number
-  height?: number
+  font_weight?: FontWeight | null
+  font_style?: FontStyle | null
+  text_align?: TextAlign | null
+  text_decoration?: TextDecoration | null
+  position_x?: number // Position relative to zone
+  position_y?: number // Position relative to zone
+  width?: number // Width relative to zone
+  height?: number // Height relative to zone
   rotation?: number
   z_index?: number
 }

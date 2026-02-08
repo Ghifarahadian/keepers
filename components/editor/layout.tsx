@@ -101,6 +101,31 @@ function EditorContent() {
         })
         return
       }
+
+      // Dropping on a zone - create new photo element in that zone
+      if (dropTarget?.type === "zone") {
+        const zone = dropTarget.zone
+        const targetPageId = dropTarget.pageId
+
+        if (!zone || !targetPageId) return
+
+        // Create new photo element filling the zone
+        await addElementToCanvas(targetPageId, {
+          type: "photo",
+          page_id: targetPageId,
+          zone_index: zone.zone_index,
+          photo_url: photo.url,
+          photo_storage_path: photo.path,
+          // Fill the zone initially (100% of zone size)
+          position_x: 0,
+          position_y: 0,
+          width: 100,
+          height: 100,
+          rotation: 0,
+          z_index: state.elements[targetPageId]?.length || 0,
+        })
+        return
+      }
     }
 
     // Handle new element creation (from elements panel)
@@ -111,9 +136,11 @@ function EditorContent() {
       const elementType = dragData.elementType
 
       // Create element at center of canvas with default size
+      // TODO: In zone-based system, should drop into specific zone instead of default
       addElementToCanvas(targetPageId, {
         type: elementType === "picture" ? "photo" : "text",
         page_id: targetPageId,
+        zone_index: 0, // Default to first zone
         position_x: 25,
         position_y: 25,
         width: 50,

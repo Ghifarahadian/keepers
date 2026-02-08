@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { X, ArrowLeft, Loader2, Star, Check } from "lucide-react"
-import type { Template, TemplateCategory } from "@/types/template"
+import type { TemplateCategory } from "@/types/template"
+import type { Project } from "@/types/editor"
 import { getTemplates, getTemplateCategories, createProjectFromTemplate } from "@/lib/template-actions"
 
 interface TemplateBrowserProps {
@@ -13,7 +14,7 @@ interface TemplateBrowserProps {
 
 export function TemplateBrowser({ onBack, onClose }: TemplateBrowserProps) {
   const router = useRouter()
-  const [templates, setTemplates] = useState<Template[]>([])
+  const [templates, setTemplates] = useState<Project[]>([])
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -208,7 +209,7 @@ export function TemplateBrowser({ onBack, onClose }: TemplateBrowserProps) {
 }
 
 interface TemplateCardProps {
-  template: Template
+  template: Project
   isSelected: boolean
   isCreating: boolean
   onSelect: () => void
@@ -235,7 +236,7 @@ function TemplateCard({ template, isSelected, isCreating, onSelect }: TemplateCa
         {template.thumbnail_url ? (
           <img
             src={template.thumbnail_url}
-            alt={template.name}
+            alt={template.title}
             className="w-full h-full object-cover"
           />
         ) : (
@@ -285,7 +286,7 @@ function TemplateCard({ template, isSelected, isCreating, onSelect }: TemplateCa
           className="font-medium text-gray-900 truncate"
           style={{ fontFamily: "var(--font-serif)" }}
         >
-          {template.name}
+          {template.title}
         </h4>
         <p className="text-xs text-gray-500 mt-1">
           {template.page_count} pages

@@ -100,10 +100,10 @@ export async function redeemVoucher(
     return { success: false, error: "Failed to redeem voucher" }
   }
 
-  // Update project status to completed
+  // Update project status to processed (order confirmed, ready for production)
   await supabase
     .from("projects")
-    .update({ status: "completed" })
+    .update({ status: "processed" })
     .eq("id", projectId)
 
   // Send order confirmation email

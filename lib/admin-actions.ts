@@ -4,18 +4,16 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type {
   AdminProfile,
+  AdminProject,
   LayoutDB,
-  Template,
   TemplateCategory,
   CreateLayoutInput,
   UpdateLayoutInput,
   CreateTemplateCategoryInput,
   UpdateTemplateCategoryInput,
-  CreateTemplateInput,
-  UpdateTemplateInput,
 } from "@/types/template"
 import type { Voucher } from "@/types/voucher"
-import type { PageCount, PaperSize } from "@/types/editor"
+import type { PageCount, PaperSize, Project } from "@/types/editor"
 
 // ============================================
 // ADMIN AUTH ACTIONS
@@ -83,7 +81,7 @@ export async function getAdminLayouts(): Promise<LayoutDB[]> {
     .from("layouts")
     .select(`
       *,
-      layout_zones (*)
+      zones!zones_layout_id_fkey (*)
     `)
     .order("sort_order")
 
@@ -109,7 +107,7 @@ export async function getAdminLayout(layoutId: string): Promise<LayoutDB | null>
     .from("layouts")
     .select(`
       *,
-      layout_zones (*)
+      zones!zones_layout_id_fkey (*)
     `)
     .eq("id", layoutId)
     .single()
@@ -148,6 +146,7 @@ export async function createLayout(input: CreateLayoutInput): Promise<LayoutDB> 
   if (input.zones.length > 0) {
     const zones = input.zones.map((z, i) => ({
       layout_id: layout.id,
+      page_id: null, // Layout zones have page_id=NULL
       zone_index: i,
       zone_type: z.zone_type,
       position_x: z.position_x,
@@ -157,7 +156,7 @@ export async function createLayout(input: CreateLayoutInput): Promise<LayoutDB> 
     }))
 
     const { error: zonesError } = await supabase
-      .from("layout_zones")
+      .from("zones")
       .insert(zones)
 
     if (zonesError) throw zonesError
@@ -197,12 +196,13 @@ export async function updateLayout(
   // Update zones if provided
   if (zones !== undefined) {
     // Delete existing zones
-    await supabase.from("layout_zones").delete().eq("layout_id", layoutId)
+    await supabase.from("zones").delete().eq("layout_id", layoutId)
 
     // Insert new zones
     if (zones.length > 0) {
       const newZones = zones.map((z, i) => ({
         layout_id: layoutId,
+        page_id: null, // Layout zones have page_id=NULL
         zone_index: i,
         zone_type: z.zone_type,
         position_x: z.position_x,
@@ -211,7 +211,7 @@ export async function updateLayout(
         height: z.height,
       }))
 
-      const { error } = await supabase.from("layout_zones").insert(newZones)
+      const { error } = await supabase.from("zones").insert(newZones)
       if (error) throw error
     }
   }
@@ -345,12 +345,13 @@ export async function deleteCategory(categoryId: string): Promise<void> {
 
 // ============================================
 // TEMPLATE ADMIN ACTIONS
+// (Templates are now projects with is_template=TRUE)
 // ============================================
 
 /**
  * Get all templates (including inactive) for admin
  */
-export async function getAdminTemplates(): Promise<Template[]> {
+export async function getAdminTemplates(): Promise<AdminProject[]> {
   const supabase = await createClient()
 
   if (!(await isAdmin())) {
@@ -358,25 +359,26 @@ export async function getAdminTemplates(): Promise<Template[]> {
   }
 
   const { data, error } = await supabase
-    .from("templates")
+    .from("projects")
     .select(`
       *,
       category:template_categories(*)
     `)
-    .order("sort_order")
+    .eq("is_template", true)
+    .order("created_at", { ascending: false })
 
   if (error) {
     console.error("Error fetching templates:", error)
     return []
   }
 
-  return data as Template[]
+  return data as AdminProject[]
 }
 
 /**
  * Get a single template with pages for admin
  */
-export async function  getAdminTemplate(templateId: string): Promise<Template | null> {
+export async function getAdminTemplate(templateId: string): Promise<Project | null> {
   const supabase = await createClient()
 
   if (!(await isAdmin())) {
@@ -384,24 +386,24 @@ export async function  getAdminTemplate(templateId: string): Promise<Template | 
   }
 
   const { data, error } = await supabase
-    .from("templates")
+    .from("projects")
     .select(`
       *,
       category:template_categories(*),
-      template_pages(
+      pages(
         *,
-        layout:layouts(*, layout_zones(*)),
-        template_elements(*)
+        page_zones(*)
       )
     `)
     .eq("id", templateId)
+    .eq("is_template", true)
     .single()
 
   if (error) return null
 
-  const template = data as Template
-  if (template.template_pages) {
-    template.template_pages.sort((a, b) => a.page_number - b.page_number)
+  const template = data as Project
+  if (template.pages) {
+    template.pages.sort((a, b) => a.page_number - b.page_number)
   }
 
   return template
@@ -410,56 +412,87 @@ export async function  getAdminTemplate(templateId: string): Promise<Template | 
 /**
  * Create a new template
  */
-export async function createTemplate(input: CreateTemplateInput): Promise<Template> {
+export async function createTemplate(input: {
+  slug: string
+  title: string
+  description?: string
+  category_id?: string
+  thumbnail_url?: string
+  page_count?: PageCount
+  paper_size?: PaperSize
+  pages: Array<{ page_number: number; layout_slug: string; title?: string }>
+}): Promise<Project> {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
 
   if (!(await isAdmin())) {
     throw new Error("Unauthorized")
   }
 
-  // Create template
+  // Create template project
   const { data: template, error: templateError } = await supabase
-    .from("templates")
+    .from("projects")
     .insert({
       slug: input.slug,
-      name: input.name,
+      title: input.title,
       description: input.description,
       category_id: input.category_id,
       thumbnail_url: input.thumbnail_url,
-      page_count: input.pages.length,
-      created_by: user?.id,
+      page_count: input.page_count || input.pages.length,
+      paper_size: input.paper_size,
+      is_template: true,
+      is_active: true,
+      user_id: null, // Templates have no owner
     })
     .select()
     .single()
 
   if (templateError) throw templateError
 
-  // Get layout IDs from slugs
-  const layoutSlugs = input.pages.map((p) => p.layout_slug)
-  const { data: layouts } = await supabase
-    .from("layouts")
-    .select("id, slug")
-    .in("slug", layoutSlugs)
-
-  const layoutMap = new Map(layouts?.map((l) => [l.slug, l.id]) || [])
-
-  // Create template pages
+  // Create template pages with zones copied from layouts
   if (input.pages.length > 0) {
-    const pages = input.pages.map((p) => ({
-      template_id: template.id,
-      page_number: p.page_number,
-      layout_id: layoutMap.get(p.layout_slug) || null,
-      title: p.title,
-    }))
+    for (const pageInput of input.pages) {
+      // Create page
+      const { data: page, error: pageError } = await supabase
+        .from("pages")
+        .insert({
+          project_id: template.id,
+          page_number: pageInput.page_number,
+          title: pageInput.title,
+          is_template: true,
+        })
+        .select()
+        .single()
 
-    const { error: pagesError } = await supabase
-      .from("template_pages")
-      .insert(pages)
+      if (pageError) throw pageError
 
-    if (pagesError) throw pagesError
+      // Copy zones from layout
+      if (pageInput.layout_slug && pageInput.layout_slug !== 'blank') {
+        const { data: layout } = await supabase
+          .from("layouts")
+          .select("id, zones!zones_layout_id_fkey(*)")
+          .eq("slug", pageInput.layout_slug)
+          .single()
+
+        if (layout && layout.zones && layout.zones.length > 0) {
+          const zonesToCreate = layout.zones.map((zone: any) => ({
+            page_id: page.id,
+            layout_id: null, // Page zones have layout_id=NULL
+            zone_index: zone.zone_index,
+            position_x: zone.position_x,
+            position_y: zone.position_y,
+            width: zone.width,
+            height: zone.height,
+            zone_type: zone.zone_type,
+          }))
+
+          const { error: zonesError } = await supabase
+            .from("zones")
+            .insert(zonesToCreate)
+
+          if (zonesError) throw zonesError
+        }
+      }
+    }
   }
 
   revalidatePath("/admin/templates")
@@ -472,7 +505,19 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
  */
 export async function updateTemplate(
   templateId: string,
-  input: UpdateTemplateInput
+  input: {
+    title?: string
+    slug?: string
+    description?: string
+    category_id?: string
+    thumbnail_url?: string
+    preview_images?: string[]
+    is_featured?: boolean
+    is_premium?: boolean
+    is_active?: boolean
+    page_count?: PageCount
+    paper_size?: PaperSize
+  }
 ): Promise<void> {
   const supabase = await createClient()
 
@@ -481,9 +526,10 @@ export async function updateTemplate(
   }
 
   const { error } = await supabase
-    .from("templates")
+    .from("projects")
     .update(input)
     .eq("id", templateId)
+    .eq("is_template", true)
 
   if (error) throw error
 
@@ -502,9 +548,10 @@ export async function deleteTemplate(templateId: string): Promise<void> {
   }
 
   const { error } = await supabase
-    .from("templates")
+    .from("projects")
     .delete()
     .eq("id", templateId)
+    .eq("is_template", true)
 
   if (error) throw error
 
@@ -526,30 +573,56 @@ export async function addTemplatePage(
     throw new Error("Unauthorized")
   }
 
-  // Get layout ID from slug
-  const { data: layout } = await supabase
-    .from("layouts")
-    .select("id")
-    .eq("slug", layoutSlug)
+  // Create page
+  const { data: page, error: pageError } = await supabase
+    .from("pages")
+    .insert({
+      project_id: templateId,
+      page_number: pageNumber,
+      title,
+      is_template: true,
+    })
+    .select()
     .single()
 
-  const { error } = await supabase.from("template_pages").insert({
-    template_id: templateId,
-    page_number: pageNumber,
-    layout_id: layout?.id || null,
-    title,
-  })
+  if (pageError) throw pageError
 
-  if (error) throw error
+  // Copy zones from layout
+  if (layoutSlug && layoutSlug !== 'blank') {
+    const { data: layout } = await supabase
+      .from("layouts")
+      .select("id, zones!zones_layout_id_fkey(*)")
+      .eq("slug", layoutSlug)
+      .single()
+
+    if (layout && layout.zones && layout.zones.length > 0) {
+      const zonesToCreate = layout.zones.map((zone: any) => ({
+        page_id: page.id,
+        layout_id: null, // Page zones have layout_id=NULL
+        zone_index: zone.zone_index,
+        position_x: zone.position_x,
+        position_y: zone.position_y,
+        width: zone.width,
+        height: zone.height,
+        zone_type: zone.zone_type,
+      }))
+
+      const { error: zonesError } = await supabase
+        .from("zones")
+        .insert(zonesToCreate)
+
+      if (zonesError) throw zonesError
+    }
+  }
 
   // Update page count
   const { data: pages } = await supabase
-    .from("template_pages")
+    .from("pages")
     .select("id")
-    .eq("template_id", templateId)
+    .eq("project_id", templateId)
 
   await supabase
-    .from("templates")
+    .from("projects")
     .update({ page_count: pages?.length || 0 })
     .eq("id", templateId)
 
@@ -570,40 +643,59 @@ export async function updateTemplatePage(
     throw new Error("Unauthorized")
   }
 
-  const updates: Record<string, unknown> = {}
-
-  if (layoutSlug !== undefined) {
-    const { data: layout } = await supabase
-      .from("layouts")
-      .select("id")
-      .eq("slug", layoutSlug)
-      .single()
-
-    updates.layout_id = layout?.id || null
-  }
-
+  // Update title if provided
   if (title !== undefined) {
-    updates.title = title
-  }
-
-  if (Object.keys(updates).length > 0) {
     const { error } = await supabase
-      .from("template_pages")
-      .update(updates)
+      .from("pages")
+      .update({ title })
       .eq("id", pageId)
 
     if (error) throw error
   }
 
+  // Update layout by copying zones
+  if (layoutSlug !== undefined) {
+    // Delete existing zones
+    await supabase.from("zones").delete().eq("page_id", pageId)
+
+    // Copy zones from new layout
+    if (layoutSlug && layoutSlug !== 'blank') {
+      const { data: layout } = await supabase
+        .from("layouts")
+        .select("id, zones!zones_layout_id_fkey(*)")
+        .eq("slug", layoutSlug)
+        .single()
+
+      if (layout && layout.zones && layout.zones.length > 0) {
+        const zonesToCreate = layout.zones.map((zone: any) => ({
+          page_id: pageId,
+          layout_id: null, // Page zones have layout_id=NULL
+          zone_index: zone.zone_index,
+          position_x: zone.position_x,
+          position_y: zone.position_y,
+          width: zone.width,
+          height: zone.height,
+          zone_type: zone.zone_type,
+        }))
+
+        const { error: zonesError } = await supabase
+          .from("zones")
+          .insert(zonesToCreate)
+
+        if (zonesError) throw zonesError
+      }
+    }
+  }
+
   // Get template ID for revalidation
   const { data: page } = await supabase
-    .from("template_pages")
-    .select("template_id")
+    .from("pages")
+    .select("project_id")
     .eq("id", pageId)
     .single()
 
   if (page) {
-    revalidatePath(`/admin/templates/${page.template_id}`)
+    revalidatePath(`/admin/templates/${page.project_id}`)
   }
 }
 
@@ -619,13 +711,13 @@ export async function deleteTemplatePage(pageId: string): Promise<void> {
 
   // Get template ID before deletion
   const { data: page } = await supabase
-    .from("template_pages")
-    .select("template_id")
+    .from("pages")
+    .select("project_id")
     .eq("id", pageId)
     .single()
 
   const { error } = await supabase
-    .from("template_pages")
+    .from("pages")
     .delete()
     .eq("id", pageId)
 
@@ -634,16 +726,16 @@ export async function deleteTemplatePage(pageId: string): Promise<void> {
   // Update page count
   if (page) {
     const { data: pages } = await supabase
-      .from("template_pages")
+      .from("pages")
       .select("id")
-      .eq("template_id", page.template_id)
+      .eq("project_id", page.project_id)
 
     await supabase
-      .from("templates")
+      .from("projects")
       .update({ page_count: pages?.length || 0 })
-      .eq("id", page.template_id)
+      .eq("id", page.project_id)
 
-    revalidatePath(`/admin/templates/${page.template_id}`)
+    revalidatePath(`/admin/templates/${page.project_id}`)
   }
 }
 
@@ -663,7 +755,7 @@ export async function reorderTemplatePages(
   // Update page numbers based on new order
   for (let i = 0; i < pageIds.length; i++) {
     await supabase
-      .from("template_pages")
+      .from("pages")
       .update({ page_number: i + 1 })
       .eq("id", pageIds[i])
   }
@@ -799,4 +891,75 @@ export async function deleteVoucher(id: string): Promise<void> {
   }
 
   revalidatePath("/admin/vouchers")
+}
+
+// ============================================
+// ORDER MANAGEMENT
+// ============================================
+
+/**
+ * Get all projects from all users for admin
+ * Joins with profiles to get user information
+ */
+export async function getAdminProjects() {
+  const supabase = await createClient()
+
+  if (!(await isAdmin())) {
+    throw new Error("Unauthorized")
+  }
+
+  // After migration, projects.user_id now references profiles.id
+  // This allows Supabase's automatic JOIN to work
+  const { data, error } = await supabase
+    .from("projects")
+    .select(`
+      *,
+      user:profiles (
+        id,
+        first_name,
+        last_name,
+        email
+      )
+    `)
+    .order("last_edited_at", { ascending: false })
+
+  if (error) {
+    console.error("Error fetching admin projects:", error)
+    return []
+  }
+
+  return data || []
+}
+
+/**
+ * Update project status (admin only)
+ * Validates status is valid enum value
+ */
+export async function updateProjectStatus(
+  projectId: string,
+  status: 'draft' | 'processed' | 'shipped' | 'completed'
+): Promise<void> {
+  const supabase = await createClient()
+
+  if (!(await isAdmin())) {
+    throw new Error("Unauthorized")
+  }
+
+  // Validate status enum
+  const validStatuses = ['draft', 'processed', 'shipped', 'completed']
+  if (!validStatuses.includes(status)) {
+    throw new Error(`Invalid status: ${status}`)
+  }
+
+  const { error } = await supabase
+    .from("projects")
+    .update({ status })
+    .eq("id", projectId)
+
+  if (error) {
+    console.error("Error updating project status:", error)
+    throw new Error("Failed to update project status")
+  }
+
+  revalidatePath("/admin/orders")
 }

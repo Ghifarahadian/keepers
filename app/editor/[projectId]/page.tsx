@@ -30,9 +30,10 @@ export default async function EditorPage({ params }: EditorPageProps) {
     redirect("/editor/new")
   }
 
-  // Check if project is completed - redirect to preview (view-only mode)
-  if (project.status === 'completed') {
-    redirect(`/editor/${projectId}/preview`)
+  // Check if project is beyond draft - redirect to order page (view-only mode)
+  // Once order is confirmed, project becomes read-only
+  if (project.status !== 'draft') {
+    redirect(`/order/${projectId}`)
   }
 
   // Load all photos used in this project and regenerate signed URLs

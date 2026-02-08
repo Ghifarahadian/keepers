@@ -10,12 +10,23 @@
 -- What this creates:
 -- 1. Profiles table (user data)
 -- 2. Waitlist table (email signups)
--- 3. Projects table (photobook projects)
--- 4. Pages table (pages within projects)
--- 5. Page zones table (customizable layout zones)
--- 6. Elements table (photos/text on pages)
--- 7. Storage bucket for project photos
--- 8. All necessary triggers, functions, and RLS policies
+-- 3. Projects table (user projects AND admin templates with is_template flag)
+-- 4. Pages table (pages for projects AND templates with is_template flag)
+-- 5. Page zones table (customizable zone instances per-page)
+-- 6. Elements table (photos/text in zones - zone_index is required)
+-- 7. Storage buckets for project photos and template assets
+-- 8. Layouts and layout zones (zone templates / "stamps")
+-- 9. Template categories (for organizing templates)
+-- 10. Vouchers table (order management)
+-- 11. All necessary triggers, functions, and RLS policies
+--
+-- Architecture: Unified template/project system with zone-based content
+-- - Templates are projects with is_template=TRUE (public, admin-created)
+-- - User projects have is_template=FALSE (private, user-owned)
+-- - Layouts are "stamps" that copy zones to pages (no ongoing reference)
+-- - Every element MUST be in a zone (zone_index required)
+-- - Element position/size are RELATIVE to zone (for cropping/zooming)
+-- - Zones are per-page instances (customizable independently)
 --
 -- This script is idempotent - safe to run multiple times.
 -- ============================================
@@ -42,9 +53,11 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   first_name VARCHAR(100),
   last_name VARCHAR(100),
+  email VARCHAR(255),
   address TEXT,
   postal_code VARCHAR(20),
   phone_number VARCHAR(30),
+  is_admin BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -68,8 +81,10 @@ CREATE POLICY "Users can insert own profile"
   ON public.profiles FOR INSERT
   WITH CHECK (auth.uid() = id);
 
--- Index
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_profiles_id ON public.profiles(id);
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
+CREATE INDEX IF NOT EXISTS idx_profiles_is_admin ON public.profiles(is_admin) WHERE is_admin = TRUE;
 
 -- Trigger for updated_at
 DROP TRIGGER IF EXISTS on_profile_updated ON public.profiles;
@@ -82,11 +97,12 @@ CREATE TRIGGER on_profile_updated
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, first_name, last_name)
+  INSERT INTO public.profiles (id, first_name, last_name, email)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'first_name', ''),
-    COALESCE(NEW.raw_user_meta_data->>'last_name', '')
+    COALESCE(NEW.raw_user_meta_data->>'last_name', ''),
+    NEW.email
   );
   RETURN NEW;
 END;
@@ -98,6 +114,25 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
+
+-- Function to sync email updates from auth.users to profiles
+CREATE OR REPLACE FUNCTION public.sync_user_email()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE public.profiles
+  SET email = NEW.email
+  WHERE id = NEW.id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger for email updates
+DROP TRIGGER IF EXISTS on_auth_user_email_updated ON auth.users;
+CREATE TRIGGER on_auth_user_email_updated
+  AFTER UPDATE OF email ON auth.users
+  FOR EACH ROW
+  WHEN (OLD.email IS DISTINCT FROM NEW.email)
+  EXECUTE FUNCTION public.sync_user_email();
 
 -- ============================================
 -- SECTION 3: WAITLIST TABLE
@@ -137,14 +172,38 @@ CREATE TRIGGER handle_waitlist_updated_at
 -- ============================================
 -- SECTION 4: PROJECTS TABLE
 -- ============================================
--- Stores photobook projects
+-- Unified table for both user projects and admin templates
+-- is_template = FALSE: User-created photobook projects (private)
+-- is_template = TRUE: Admin-created templates (public blueprints)
 
 CREATE TABLE IF NOT EXISTS public.projects (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE, -- NULL for templates
   title VARCHAR(255) NOT NULL DEFAULT 'Untitled Project',
   cover_photo_url TEXT,
-  status VARCHAR(50) DEFAULT 'draft' CHECK (status IN ('draft', 'completed', 'archived')),
+  status VARCHAR(50) DEFAULT 'draft' CHECK (status IN ('draft', 'processed', 'shipped', 'completed')),
+
+  -- Template/Project distinction
+  is_template BOOLEAN DEFAULT FALSE,
+
+  -- Template-specific fields (NULL for user projects)
+  slug VARCHAR(100) UNIQUE, -- URL-friendly slug for templates (e.g., 'vacation-memories')
+  description TEXT, -- Template description shown in template browser
+  category_id UUID REFERENCES public.template_categories(id) ON DELETE SET NULL, -- Template category
+  thumbnail_url TEXT, -- Template thumbnail image URL
+  preview_images JSONB, -- JSON array of template preview image URLs
+  is_featured BOOLEAN DEFAULT FALSE, -- TRUE if template should appear in featured section
+  is_premium BOOLEAN DEFAULT FALSE, -- TRUE if template requires payment
+  is_active BOOLEAN DEFAULT TRUE, -- Controls template visibility to users
+
+  -- Product configuration
+  page_count INT CHECK (page_count IN (30, 40)),
+  paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only')),
+
+  -- Voucher (projects only)
+  voucher_code VARCHAR(50),
+
+  -- Metadata
   last_edited_at TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -158,25 +217,44 @@ CREATE INDEX IF NOT EXISTS idx_projects_last_edited ON public.projects(user_id, 
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
+-- Templates are publicly readable, projects are private to owner
 DROP POLICY IF EXISTS "Users can view own projects" ON public.projects;
-CREATE POLICY "Users can view own projects"
+DROP POLICY IF EXISTS "Users can view templates or own projects" ON public.projects;
+CREATE POLICY "Users can view templates or own projects"
   ON public.projects FOR SELECT
-  USING (auth.uid() = user_id);
+  TO authenticated
+  USING (is_template = TRUE OR user_id = auth.uid());
 
+-- Users can only create their own projects (not templates)
 DROP POLICY IF EXISTS "Users can insert own projects" ON public.projects;
 CREATE POLICY "Users can insert own projects"
   ON public.projects FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+  TO authenticated
+  WITH CHECK (user_id = auth.uid() AND is_template = FALSE);
 
+-- Users can only update their own projects (not templates)
 DROP POLICY IF EXISTS "Users can update own projects" ON public.projects;
 CREATE POLICY "Users can update own projects"
   ON public.projects FOR UPDATE
-  USING (auth.uid() = user_id);
+  TO authenticated
+  USING (user_id = auth.uid() AND is_template = FALSE);
 
+-- Users can only delete their own projects (not templates)
 DROP POLICY IF EXISTS "Users can delete own projects" ON public.projects;
 CREATE POLICY "Users can delete own projects"
   ON public.projects FOR DELETE
-  USING (auth.uid() = user_id);
+  TO authenticated
+  USING (user_id = auth.uid() AND is_template = FALSE);
+
+-- Admins can manage templates
+DROP POLICY IF EXISTS "Admins can manage templates" ON public.projects;
+CREATE POLICY "Admins can manage templates"
+  ON public.projects FOR ALL
+  TO authenticated
+  USING (
+    is_template = TRUE AND
+    EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE)
+  );
 
 -- Trigger for updated_at
 DROP TRIGGER IF EXISTS on_project_updated ON public.projects;
@@ -188,14 +266,15 @@ CREATE TRIGGER on_project_updated
 -- ============================================
 -- SECTION 5: PAGES TABLE
 -- ============================================
--- Stores pages within projects
+-- Stores pages within projects and templates
+-- Zones are copied from layouts when applied (not referenced)
 
 CREATE TABLE IF NOT EXISTS public.pages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   page_number INT NOT NULL,
-  layout_id VARCHAR(100) NOT NULL DEFAULT 'blank',
   title VARCHAR(255),
+  is_template BOOLEAN DEFAULT FALSE, -- Inherited from parent project
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(project_id, page_number)
@@ -207,42 +286,77 @@ CREATE INDEX IF NOT EXISTS idx_pages_project_id ON public.pages(project_id, page
 -- Enable RLS
 ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies (inherit from project ownership)
+-- RLS Policies (inherit from project ownership, allow public read for template pages)
 DROP POLICY IF EXISTS "Users can view own pages" ON public.pages;
-CREATE POLICY "Users can view own pages"
+DROP POLICY IF EXISTS "Users can view template pages or own pages" ON public.pages;
+CREATE POLICY "Users can view template pages or own pages"
   ON public.pages FOR SELECT
-  USING (EXISTS (
-    SELECT 1 FROM public.projects
-    WHERE projects.id = pages.project_id
-    AND projects.user_id = auth.uid()
-  ));
+  TO authenticated
+  USING (
+    is_template = TRUE OR
+    EXISTS (
+      SELECT 1 FROM public.projects
+      WHERE projects.id = pages.project_id
+        AND (projects.is_template = TRUE OR projects.user_id = auth.uid())
+    )
+  );
 
 DROP POLICY IF EXISTS "Users can insert own pages" ON public.pages;
-CREATE POLICY "Users can insert own pages"
+DROP POLICY IF EXISTS "Users can create pages for their own projects" ON public.pages;
+CREATE POLICY "Users can create pages for their own projects"
   ON public.pages FOR INSERT
-  WITH CHECK (EXISTS (
-    SELECT 1 FROM public.projects
-    WHERE projects.id = pages.project_id
-    AND projects.user_id = auth.uid()
-  ));
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.projects
+      WHERE projects.id = pages.project_id
+        AND (
+          projects.user_id = auth.uid() OR
+          (projects.is_template = TRUE AND EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+          ))
+        )
+    )
+  );
 
 DROP POLICY IF EXISTS "Users can update own pages" ON public.pages;
-CREATE POLICY "Users can update own pages"
+DROP POLICY IF EXISTS "Users can update pages in their own projects" ON public.pages;
+CREATE POLICY "Users can update pages in their own projects"
   ON public.pages FOR UPDATE
-  USING (EXISTS (
-    SELECT 1 FROM public.projects
-    WHERE projects.id = pages.project_id
-    AND projects.user_id = auth.uid()
-  ));
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.projects
+      WHERE projects.id = pages.project_id
+        AND (
+          projects.user_id = auth.uid() OR
+          (projects.is_template = TRUE AND EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+          ))
+        )
+    )
+  );
 
 DROP POLICY IF EXISTS "Users can delete own pages" ON public.pages;
-CREATE POLICY "Users can delete own pages"
+DROP POLICY IF EXISTS "Users can delete pages from their own projects" ON public.pages;
+CREATE POLICY "Users can delete pages from their own projects"
   ON public.pages FOR DELETE
-  USING (EXISTS (
-    SELECT 1 FROM public.projects
-    WHERE projects.id = pages.project_id
-    AND projects.user_id = auth.uid()
-  ));
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.projects
+      WHERE projects.id = pages.project_id
+        AND (
+          projects.user_id = auth.uid() OR
+          (projects.is_template = TRUE AND EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+          ))
+        )
+    )
+  );
 
 -- Trigger for updated_at
 DROP TRIGGER IF EXISTS on_page_updated ON public.pages;
@@ -372,7 +486,8 @@ CREATE TABLE IF NOT EXISTS public.elements (
   text_align VARCHAR(20) DEFAULT 'left',
   text_decoration VARCHAR(20) DEFAULT 'none',
 
-  -- Layout positioning (percentages for responsive design)
+  -- Layout positioning RELATIVE TO ZONE (percentages for responsive design)
+  -- These values define position/size within the zone for cropping/zooming
   position_x FLOAT NOT NULL,
   position_y FLOAT NOT NULL,
   width FLOAT NOT NULL,
@@ -380,8 +495,8 @@ CREATE TABLE IF NOT EXISTS public.elements (
   rotation FLOAT DEFAULT 0,
   z_index INT DEFAULT 0,
 
-  -- Zone assignment (null for free-floating elements)
-  zone_index INT DEFAULT NULL,
+  -- Zone assignment (REQUIRED - all elements must be in a zone)
+  zone_index INT NOT NULL,
 
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -462,8 +577,12 @@ CREATE TRIGGER on_element_modified
   FOR EACH ROW
   EXECUTE FUNCTION update_project_last_edited_from_element();
 
--- Comment
-COMMENT ON COLUMN public.elements.zone_index IS 'Index of the layout zone this element belongs to (null for free-floating elements)';
+-- Comments
+COMMENT ON COLUMN public.elements.zone_index IS 'Index of the layout zone this element belongs to (REQUIRED - all elements must be in a zone)';
+COMMENT ON COLUMN public.elements.position_x IS 'X position relative to zone (for cropping/panning). Can be negative for offset.';
+COMMENT ON COLUMN public.elements.position_y IS 'Y position relative to zone (for cropping/panning). Can be negative for offset.';
+COMMENT ON COLUMN public.elements.width IS 'Width relative to zone (for zoom/scale). >100% means zoomed in/cropped.';
+COMMENT ON COLUMN public.elements.height IS 'Height relative to zone (for zoom/scale). >100% means zoomed in/cropped.';
 
 -- ============================================
 -- SECTION 8: STORAGE BUCKET
@@ -523,53 +642,18 @@ ORDER BY table_name;
 SELECT id, name, public FROM storage.buckets WHERE name = 'project-photos';
 
 -- ============================================
--- MIGRATION: Add text styling columns to elements
+-- MIGRATIONS FOR EXISTING DATABASES
 -- ============================================
--- Run this if you have an existing database without these columns
--- These statements are safe to run multiple times (IF NOT EXISTS)
-
-DO $$
-BEGIN
-  -- Add font_weight column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'elements' AND column_name = 'font_weight') THEN
-    ALTER TABLE public.elements ADD COLUMN font_weight VARCHAR(20) DEFAULT 'normal';
-  END IF;
-
-  -- Add font_style column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'elements' AND column_name = 'font_style') THEN
-    ALTER TABLE public.elements ADD COLUMN font_style VARCHAR(20) DEFAULT 'normal';
-  END IF;
-
-  -- Add text_align column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'elements' AND column_name = 'text_align') THEN
-    ALTER TABLE public.elements ADD COLUMN text_align VARCHAR(20) DEFAULT 'left';
-  END IF;
-
-  -- Add text_decoration column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'elements' AND column_name = 'text_decoration') THEN
-    ALTER TABLE public.elements ADD COLUMN text_decoration VARCHAR(20) DEFAULT 'none';
-  END IF;
-END $$;
+-- If you have an existing database that was created with an earlier version
+-- of this setup script, you may need to run migration scripts.
+-- See: sql/migrations/ folder for all available migrations.
+-- ============================================
 
 -- ============================================
 -- SECTION 9: ADMIN FLAG ON PROFILES
 -- ============================================
--- Add is_admin column to profiles for admin access control
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'profiles' AND column_name = 'is_admin') THEN
-    ALTER TABLE public.profiles ADD COLUMN is_admin BOOLEAN DEFAULT FALSE;
-  END IF;
-END $$;
-
--- Index for admin lookups
-CREATE INDEX IF NOT EXISTS idx_profiles_is_admin ON public.profiles(is_admin) WHERE is_admin = TRUE;
+-- Added during initial setup (see migrations/add-admin-flag.sql for existing DBs)
+-- NOTE: The is_admin column is created in the profiles table definition above (line 49)
 
 -- ============================================
 -- SECTION 10: LAYOUTS TABLE
@@ -716,168 +800,22 @@ CREATE TRIGGER on_template_category_updated
   EXECUTE FUNCTION public.handle_updated_at();
 
 -- ============================================
--- SECTION 13: TEMPLATES TABLE
+-- SECTION 13: REMOVED - TEMPLATES & TEMPLATE PAGES
 -- ============================================
--- Stores photobook templates
-
-CREATE TABLE IF NOT EXISTS public.templates (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  slug VARCHAR(100) NOT NULL UNIQUE,
-  name VARCHAR(200) NOT NULL,
-  description TEXT,
-  category_id UUID REFERENCES public.template_categories(id) ON DELETE SET NULL,
-  thumbnail_url TEXT,
-  preview_images JSONB DEFAULT '[]',
-  page_count INT NOT NULL DEFAULT 10,
-  is_featured BOOLEAN DEFAULT FALSE,
-  is_premium BOOLEAN DEFAULT FALSE,
-  is_active BOOLEAN DEFAULT TRUE,
-  sort_order INT DEFAULT 0,
-  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_templates_slug ON public.templates(slug);
-CREATE INDEX IF NOT EXISTS idx_templates_category ON public.templates(category_id);
-CREATE INDEX IF NOT EXISTS idx_templates_featured ON public.templates(is_featured) WHERE is_featured = TRUE;
-CREATE INDEX IF NOT EXISTS idx_templates_active ON public.templates(is_active, sort_order);
-
--- Enable RLS
-ALTER TABLE public.templates ENABLE ROW LEVEL SECURITY;
-
--- Everyone can view active templates
-DROP POLICY IF EXISTS "Anyone can view active templates" ON public.templates;
-CREATE POLICY "Anyone can view active templates"
-  ON public.templates FOR SELECT
-  USING (is_active = TRUE);
-
--- Admins can manage templates
-DROP POLICY IF EXISTS "Admins can manage templates" ON public.templates;
-CREATE POLICY "Admins can manage templates"
-  ON public.templates FOR ALL
-  USING (EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
-  ));
-
--- Trigger for updated_at
-DROP TRIGGER IF EXISTS on_template_updated ON public.templates;
-CREATE TRIGGER on_template_updated
-  BEFORE UPDATE ON public.templates
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_updated_at();
+-- Templates have been merged into the projects table with is_template flag.
+-- Template pages have been merged into the pages table with is_template flag.
+--
+-- Migration: templates → projects (WHERE is_template = TRUE)
+-- Migration: template_pages → pages (WHERE is_template = TRUE)
+--
+-- For existing databases, run: sql/migrations/merge-templates-into-projects.sql
 
 -- ============================================
--- SECTION 14: TEMPLATE PAGES TABLE
+-- SECTION 14: REMOVED - TEMPLATE ELEMENTS
 -- ============================================
--- Stores the page structure for each template
-
-CREATE TABLE IF NOT EXISTS public.template_pages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  template_id UUID NOT NULL REFERENCES public.templates(id) ON DELETE CASCADE,
-  page_number INT NOT NULL,
-  layout_id UUID REFERENCES public.layouts(id) ON DELETE SET NULL,
-  title VARCHAR(255),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(template_id, page_number)
-);
-
--- Index
-CREATE INDEX IF NOT EXISTS idx_template_pages_template ON public.template_pages(template_id, page_number);
-
--- Enable RLS
-ALTER TABLE public.template_pages ENABLE ROW LEVEL SECURITY;
-
--- Everyone can view template pages for active templates
-DROP POLICY IF EXISTS "Anyone can view template pages" ON public.template_pages;
-CREATE POLICY "Anyone can view template pages"
-  ON public.template_pages FOR SELECT
-  USING (EXISTS (
-    SELECT 1 FROM public.templates
-    WHERE templates.id = template_pages.template_id AND templates.is_active = TRUE
-  ));
-
--- Admins can manage template pages
-DROP POLICY IF EXISTS "Admins can manage template pages" ON public.template_pages;
-CREATE POLICY "Admins can manage template pages"
-  ON public.template_pages FOR ALL
-  USING (EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
-  ));
-
--- Trigger for updated_at
-DROP TRIGGER IF EXISTS on_template_page_updated ON public.template_pages;
-CREATE TRIGGER on_template_page_updated
-  BEFORE UPDATE ON public.template_pages
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_updated_at();
-
--- ============================================
--- SECTION 15: TEMPLATE ELEMENTS TABLE
--- ============================================
--- Stores pre-placed elements (text, decorations) on template pages
-
-CREATE TABLE IF NOT EXISTS public.template_elements (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  template_page_id UUID NOT NULL REFERENCES public.template_pages(id) ON DELETE CASCADE,
-  type VARCHAR(50) NOT NULL CHECK (type IN ('text', 'decoration')),
-
-  -- Text element fields
-  text_content TEXT,
-  font_family VARCHAR(100),
-  font_size INT,
-  font_color VARCHAR(20),
-  font_weight VARCHAR(20) DEFAULT 'normal',
-  font_style VARCHAR(20) DEFAULT 'normal',
-  text_align VARCHAR(20) DEFAULT 'left',
-
-  -- Positioning (percentages 0-100)
-  position_x FLOAT NOT NULL,
-  position_y FLOAT NOT NULL,
-  width FLOAT NOT NULL,
-  height FLOAT NOT NULL,
-  rotation FLOAT DEFAULT 0,
-  z_index INT DEFAULT 0,
-
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Index
-CREATE INDEX IF NOT EXISTS idx_template_elements_page ON public.template_elements(template_page_id);
-
--- Enable RLS
-ALTER TABLE public.template_elements ENABLE ROW LEVEL SECURITY;
-
--- Everyone can view template elements for active templates
-DROP POLICY IF EXISTS "Anyone can view template elements" ON public.template_elements;
-CREATE POLICY "Anyone can view template elements"
-  ON public.template_elements FOR SELECT
-  USING (EXISTS (
-    SELECT 1 FROM public.template_pages tp
-    JOIN public.templates t ON t.id = tp.template_id
-    WHERE tp.id = template_elements.template_page_id AND t.is_active = TRUE
-  ));
-
--- Admins can manage template elements
-DROP POLICY IF EXISTS "Admins can manage template elements" ON public.template_elements;
-CREATE POLICY "Admins can manage template elements"
-  ON public.template_elements FOR ALL
-  USING (EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
-  ));
-
--- Trigger for updated_at
-DROP TRIGGER IF EXISTS on_template_element_updated ON public.template_elements;
-CREATE TRIGGER on_template_element_updated
-  BEFORE UPDATE ON public.template_elements
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_updated_at();
+-- Template elements have been removed in favor of zone-based content system.
+-- All content (photos, text, decorations) must be placed in zones.
+-- Templates define page structures via layouts and zones only.
 
 -- ============================================
 -- SECTION 16: TEMPLATE ASSETS STORAGE BUCKET
@@ -1017,29 +955,6 @@ INSERT INTO public.template_categories (slug, name, description, icon, sort_orde
 ON CONFLICT (slug) DO NOTHING;
 
 -- ============================================
--- MIGRATION: Add zone_type column to layout_zones
--- ============================================
--- Run this if you have an existing database without the zone_type column
--- This statement is safe to run multiple times (IF NOT EXISTS)
-
-DO $$
-BEGIN
-  -- Add zone_type column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'layout_zones' AND column_name = 'zone_type') THEN
-    ALTER TABLE public.layout_zones
-    ADD COLUMN zone_type VARCHAR(10) NOT NULL DEFAULT 'photo';
-
-    -- Add check constraint
-    ALTER TABLE public.layout_zones
-    ADD CONSTRAINT zone_type_check CHECK (zone_type IN ('photo', 'text'));
-
-    -- Update existing zones to have 'photo' type (already handled by default)
-    UPDATE public.layout_zones SET zone_type = 'photo' WHERE zone_type IS NULL;
-  END IF;
-END $$;
-
--- ============================================
 -- SECTION 19: VOUCHERS TABLE
 -- ============================================
 -- Stores voucher codes for redemption
@@ -1048,7 +963,7 @@ CREATE TABLE IF NOT EXISTS public.vouchers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   code VARCHAR(50) NOT NULL UNIQUE,
   is_redeemed BOOLEAN DEFAULT FALSE,
-  redeemed_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  redeemed_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   redeemed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -1084,90 +999,8 @@ CREATE POLICY "Admins can manage vouchers"
   ));
 
 -- ============================================
--- SECTION 20: VOUCHER LIFECYCLE & PROJECT CONFIGURATION
+-- NOTE: For existing databases, see migrations folder
 -- ============================================
--- Enhances voucher system with three-state lifecycle and adds project configuration
-
--- Add project configuration columns
-DO $$
-BEGIN
-  -- Add page_count column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'projects' AND column_name = 'page_count') THEN
-    ALTER TABLE public.projects ADD COLUMN page_count INT CHECK (page_count IN (30, 40)) DEFAULT 30;
-  END IF;
-
-  -- Add paper_size column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'projects' AND column_name = 'paper_size') THEN
-    ALTER TABLE public.projects ADD COLUMN paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only')) DEFAULT 'A4';
-  END IF;
-
-  -- Add voucher_code column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'projects' AND column_name = 'voucher_code') THEN
-    ALTER TABLE public.projects ADD COLUMN voucher_code VARCHAR(50);
-  END IF;
-END $$;
-
--- Add index for voucher_code lookups
-CREATE INDEX IF NOT EXISTS idx_projects_voucher_code ON public.projects(voucher_code);
-
--- Add voucher lifecycle columns
-DO $$
-BEGIN
-  -- Add status column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'vouchers' AND column_name = 'status') THEN
-    ALTER TABLE public.vouchers
-      ADD COLUMN status VARCHAR(20) DEFAULT 'not_redeemed'
-        CHECK (status IN ('not_redeemed', 'being_redeemed', 'fully_redeemed'));
-  END IF;
-
-  -- Add page_count column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'vouchers' AND column_name = 'page_count') THEN
-    ALTER TABLE public.vouchers ADD COLUMN page_count INT CHECK (page_count IN (30, 40));
-  END IF;
-
-  -- Add paper_size column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'vouchers' AND column_name = 'paper_size') THEN
-    ALTER TABLE public.vouchers ADD COLUMN paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only'));
-  END IF;
-
-  -- Add project_id column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'vouchers' AND column_name = 'project_id') THEN
-    ALTER TABLE public.vouchers ADD COLUMN project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL;
-  END IF;
-END $$;
-
--- Migrate existing voucher data from is_redeemed to status
--- This is safe to run multiple times
-UPDATE public.vouchers
-SET status = CASE
-  WHEN is_redeemed = TRUE THEN 'fully_redeemed'
-  ELSE 'not_redeemed'
-END
-WHERE status IS NULL OR status = 'not_redeemed';
-
--- Add indexes for voucher queries
-CREATE INDEX IF NOT EXISTS idx_vouchers_status ON public.vouchers(status);
-CREATE INDEX IF NOT EXISTS idx_vouchers_project_id ON public.vouchers(project_id);
-
--- Update RLS policy for voucher updates (now uses status instead of is_redeemed)
-DROP POLICY IF EXISTS "Authenticated users can redeem vouchers" ON public.vouchers;
-CREATE POLICY "Authenticated users can redeem vouchers"
-  ON public.vouchers FOR UPDATE
-  TO authenticated
-  USING (status IN ('not_redeemed', 'being_redeemed'));
-
--- Comments for documentation
-COMMENT ON COLUMN public.projects.page_count IS 'Number of pages in photobook (30 or 40)';
-COMMENT ON COLUMN public.projects.paper_size IS 'Paper size of photobook (A4 or A5)';
-COMMENT ON COLUMN public.projects.voucher_code IS 'Voucher code used for this project (if any)';
-COMMENT ON COLUMN public.vouchers.status IS 'Voucher lifecycle status: not_redeemed (available) -> being_redeemed (assigned to draft project) -> fully_redeemed (project completed)';
-COMMENT ON COLUMN public.vouchers.page_count IS 'Number of pages this voucher is valid for (30 or 40)';
-COMMENT ON COLUMN public.vouchers.paper_size IS 'Paper size this voucher is valid for (A4 or A5)';
-COMMENT ON COLUMN public.vouchers.project_id IS 'Project this voucher is currently assigned to (null when not_redeemed or fully_redeemed without project link)';
+-- The setup.sql now includes all necessary columns in table definitions.
+-- If you have an existing database, run the appropriate migration scripts
+-- from sql/migrations/ to add missing columns and update foreign keys.

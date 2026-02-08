@@ -5,11 +5,14 @@ import { revalidatePath } from "next/cache"
 import type {
   Project,
   Page,
+  PageZone,
   Element,
   CreateProjectInput,
   UpdateProjectInput,
   CreatePageInput,
   UpdatePageInput,
+  CreateZoneInput,
+  UpdateZoneInput,
   CreateElementInput,
   UpdateElementInput,
 } from "@/types/editor"
@@ -37,6 +40,7 @@ export async function createProject(
     .insert({
       user_id: user.id,
       title: input?.title || "Untitled Project",
+      is_template: false, // User projects are never templates
       page_count: input?.page_count || 30,
       paper_size: input?.paper_size || 'A4',
       voucher_code: input?.voucher_code || null,
@@ -62,24 +66,21 @@ export async function createProject(
   const totalSpreads = pageCount / 2
   const pagesToCreate = []
 
-  // Create pages for all spreads
+  // Create pages for all spreads (initially empty, no zones)
   for (let spreadIndex = 0; spreadIndex < totalSpreads; spreadIndex++) {
     const leftPageNumber = spreadIndex * 2 + 1
     const rightPageNumber = spreadIndex * 2 + 2
 
-    // First spread is cover, rest are blank
-    const layoutId = "blank"
-
     pagesToCreate.push({
       project_id: project.id,
       page_number: leftPageNumber,
-      layout_id: layoutId,
+      is_template: false,
     })
 
     pagesToCreate.push({
       project_id: project.id,
       page_number: rightPageNumber,
-      layout_id: layoutId,
+      is_template: false,
     })
   }
 
@@ -98,9 +99,11 @@ export async function createProject(
     throw new Error("No pages were created")
   }
 
+  // Note: Pages start with no zones. Users add zones by applying layouts (which copies zones)
+
   return {
     ...project,
-    pages: pages.map(page => ({ ...page, elements: [] })),
+    pages: pages.map(page => ({ ...page, zones: [], elements: [] })),
   }
 }
 
@@ -112,7 +115,7 @@ export async function getProject(projectId: string): Promise<Project | null> {
 
   if (!user) return null
 
-  // Get project with pages and elements
+  // Get project with pages, zones, and elements
   const { data: project, error } = await supabase
     .from("projects")
     .select(
@@ -120,6 +123,7 @@ export async function getProject(projectId: string): Promise<Project | null> {
       *,
       pages (
         *,
+        zones!zones_page_id_fkey (*),
         elements (*)
       )
     `
@@ -145,12 +149,15 @@ export async function getProject(projectId: string): Promise<Project | null> {
     return null
   }
 
-  // Sort pages by page_number and elements by z_index
+  // Sort pages by page_number, zones by zone_index, and elements by z_index
   if (project && project.pages) {
     project.pages = project.pages
       .sort((a: Page, b: Page) => a.page_number - b.page_number)
-      .map((page: Page) => ({
+      .map((page: any) => ({
         ...page,
+        zones: page.zones
+          ? page.zones.sort((a: any, b: any) => a.zone_index - b.zone_index)
+          : [],
         elements: page.elements
           ? page.elements.sort((a: Element, b: Element) => a.z_index - b.z_index)
           : [],
@@ -247,6 +254,7 @@ export async function getUserProjects(): Promise<Project[]> {
 
   if (!user) return []
 
+  // Return all user projects regardless of status
   const { data: projects, error } = await supabase
     .from("projects")
     .select("*")
@@ -275,23 +283,22 @@ export async function createPage(input: CreatePageInput): Promise<Page> {
     throw new Error("Unauthorized")
   }
 
-  const layoutId = input.layout_id || "blank"
-
   const { data: page, error } = await supabase
     .from("pages")
     .insert({
       project_id: input.project_id,
       page_number: input.page_number,
-      layout_id: layoutId,
       title: input.title,
+      is_template: input.is_template || false,
     })
     .select()
     .single()
 
   if (error) throw error
 
+  // Note: Page starts with no zones. User adds zones by applying a layout.
   revalidatePath(`/editor/${input.project_id}`)
-  return { ...page, elements: [] } as Page
+  return { ...page, zones: [], elements: [] } as Page
 }
 
 export async function updatePage(
@@ -359,6 +366,77 @@ export async function reorderPages(
 }
 
 // ============================================
+// ZONE ACTIONS
+// ============================================
+
+export async function createZone(input: CreateZoneInput): Promise<PageZone> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
+
+  const { data: zone, error } = await supabase
+    .from("zones")
+    .insert({
+      page_id: input.page_id || null,
+      layout_id: input.layout_id || null,
+      zone_index: input.zone_index,
+      position_x: input.position_x,
+      position_y: input.position_y,
+      width: input.width,
+      height: input.height,
+      zone_type: input.zone_type || null,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+
+  return zone as PageZone
+}
+
+export async function updateZone(
+  zoneId: string,
+  updates: UpdateZoneInput
+): Promise<void> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
+
+  const { error } = await supabase
+    .from("zones")
+    .update(updates)
+    .eq("id", zoneId)
+
+  if (error) throw error
+}
+
+export async function deleteZone(zoneId: string): Promise<void> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("Unauthorized")
+  }
+
+  const { error } = await supabase.from("zones").delete().eq("id", zoneId)
+
+  if (error) throw error
+}
+
+
+// ============================================
 // ELEMENT ACTIONS
 // ============================================
 
@@ -379,12 +457,17 @@ export async function createElement(
     .insert({
       page_id: input.page_id,
       type: input.type,
+      zone_index: input.zone_index,
       photo_url: input.photo_url,
       photo_storage_path: input.photo_storage_path,
       text_content: input.text_content,
       font_family: input.font_family,
       font_size: input.font_size,
       font_color: input.font_color,
+      font_weight: input.font_weight,
+      font_style: input.font_style,
+      text_align: input.text_align,
+      text_decoration: input.text_decoration,
       position_x: input.position_x,
       position_y: input.position_y,
       width: input.width,

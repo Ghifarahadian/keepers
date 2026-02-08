@@ -3,12 +3,12 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Edit, Trash2, Star, Eye, EyeOff } from "lucide-react"
-import type { Template } from "@/types/template"
+import type { AdminProject } from "@/types/template"
 import { deleteTemplate, updateTemplate } from "@/lib/admin-actions"
 import { useState } from "react"
 
 interface TemplateListProps {
-  templates: Template[]
+  templates: AdminProject[]
 }
 
 export function TemplateList({ templates }: TemplateListProps) {
@@ -16,8 +16,8 @@ export function TemplateList({ templates }: TemplateListProps) {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
 
-  const handleDelete = async (template: Template) => {
-    if (!confirm(`Are you sure you want to delete "${template.name}"?`)) {
+  const handleDelete = async (template: AdminProject) => {
+    if (!confirm(`Are you sure you want to delete "${template.title}"?`)) {
       return
     }
 
@@ -33,7 +33,7 @@ export function TemplateList({ templates }: TemplateListProps) {
     }
   }
 
-  const handleToggleFeatured = async (template: Template) => {
+  const handleToggleFeatured = async (template: AdminProject) => {
     setToggling(template.id)
     try {
       await updateTemplate(template.id, { is_featured: !template.is_featured })
@@ -45,7 +45,7 @@ export function TemplateList({ templates }: TemplateListProps) {
     }
   }
 
-  const handleToggleActive = async (template: Template) => {
+  const handleToggleActive = async (template: AdminProject) => {
     setToggling(template.id)
     try {
       await updateTemplate(template.id, { is_active: !template.is_active })
@@ -76,7 +76,7 @@ export function TemplateList({ templates }: TemplateListProps) {
             {template.thumbnail_url ? (
               <img
                 src={template.thumbnail_url}
-                alt={template.name}
+                alt={template.title}
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -139,7 +139,7 @@ export function TemplateList({ templates }: TemplateListProps) {
                 color: "var(--color-neutral)",
               }}
             >
-              {template.name}
+              {template.title}
             </h3>
             {template.description && (
               <p

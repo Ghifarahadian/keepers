@@ -32,6 +32,21 @@ function formatRelativeTime(dateString: string): string {
   })
 }
 
+export function getStatusBadgeColors(status: string): string {
+  switch (status) {
+    case "draft":
+      return "bg-yellow-100 text-yellow-800"
+    case "processed":
+      return "bg-blue-100 text-blue-800"
+    case "shipped":
+      return "bg-purple-100 text-purple-800"
+    case "completed":
+      return "bg-green-100 text-green-800"
+    default:
+      return "bg-gray-100 text-gray-800"
+  }
+}
+
 export function ProjectSelectorModal({ projects }: ProjectSelectorModalProps) {
   const router = useRouter()
   const [isCreating, setIsCreating] = useState(false)
@@ -157,7 +172,7 @@ export function ProjectSelectorModal({ projects }: ProjectSelectorModalProps) {
             Your Projects
           </h2>
           <p className="text-center text-gray-500 mt-2">
-            Continue editing a draft or start fresh
+            Continue editing a project or start fresh
           </p>
         </div>
 
@@ -366,7 +381,7 @@ export function ProjectSelectorModal({ projects }: ProjectSelectorModalProps) {
                 className="text-xl font-semibold mb-4"
                 style={{ fontFamily: "var(--font-serif)", color: "var(--color-neutral)" }}
               >
-                Your Drafts
+                Your Projects
               </h3>
 
               {/* Projects List */}
@@ -400,20 +415,22 @@ export function ProjectSelectorModal({ projects }: ProjectSelectorModalProps) {
 
                         {/* Status Badge */}
                         <div className="flex-shrink-0">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 capitalize">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusBadgeColors(project.status)}`}>
                             {project.status}
                           </span>
                         </div>
 
-                        {/* Delete Button */}
-                        <button
-                          onClick={(e) => handleDeleteProject(e, project.id)}
-                          disabled={deletingId === project.id}
-                          className="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                          title="Delete project"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {/* Delete Button - Only show for draft projects */}
+                        {project.status === "draft" && (
+                          <button
+                            onClick={(e) => handleDeleteProject(e, project.id)}
+                            disabled={deletingId === project.id}
+                            className="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            title="Delete project"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
