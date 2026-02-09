@@ -177,6 +177,473 @@ keepers/
 
 ---
 
+## Database Schema & Relationships
+
+### Overview
+
+KEEPERS uses Supabase (PostgreSQL) with Row Level Security (RLS) for all data access. The schema follows a clear hierarchy: **Users → Projects → Pages → Zones → Elements**. Each level enforces ownership and access control through RLS policies.
+
+### Core Principles
+
+1. **Zone-Based Architecture**: Elements are directly related to zones (not pages), providing cleaner relationships
+2. **Cascade Deletes**: Foreign keys with `ON DELETE CASCADE` ensure data integrity
+3. **Row Level Security**: All tables protected with RLS policies checking user ownership
+4. **Unified Zones**: Single `zones` table serves both layout templates and page zones
+
+### Table Hierarchy
+
+```
+auth.users (Supabase managed)
+    ↓
+profiles (user details + delivery info)
+    ↓
+projects (photobooks)
+    ↓
+pages (spreads in a project)
+    ↓
+zones (photo/text containers on pages)
+    ↓
+elements (photos/text within zones)
+```
+
+### Tables & Relationships
+
+#### 1. **profiles** (`public.profiles`)
+Extended user information linked to Supabase Auth.
+
+**Schema:**
+```sql
+CREATE TABLE public.profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  email VARCHAR(255),
+  address TEXT,
+  postal_code VARCHAR(20),
+  phone_number VARCHAR(30),
+  is_admin BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Relationships:**
+- **1:1** with `auth.users` (Supabase Auth)
+- **1:N** with `projects` (a user can have many projects)
+
+**Key Points:**
+- Auto-created via trigger when user signs up
+- Includes delivery information for photobook orders
+- `is_admin` flag for admin panel access
+
+---
+
+#### 2. **projects** (`public.projects`)
+User photobook projects with configuration.
+
+**Schema:**
+```sql
+CREATE TABLE public.projects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  title VARCHAR(255) NOT NULL DEFAULT 'Untitled Project',
+  cover_photo_url TEXT,
+  status VARCHAR(50) DEFAULT 'draft', -- draft, processed, shipped, completed
+  template_id UUID REFERENCES public.templates(id) ON DELETE SET NULL,
+  page_count INT CHECK (page_count IN (30, 40)),
+  paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only')),
+  voucher_code VARCHAR(50),
+  last_edited_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Relationships:**
+- **N:1** with `profiles` (many projects belong to one user)
+- **1:N** with `pages` (a project has many pages)
+- **N:1** with `templates` (optional, for template-based projects)
+- **1:1** with `vouchers` (optional, via voucher_code)
+
+**Key Points:**
+- Users can only access their own projects (RLS enforced)
+- `last_edited_at` auto-updates on page/zone/element changes
+- Product configuration: page_count (30/40) and paper_size (A4/A5/PDF)
+
+---
+
+#### 3. **pages** (`public.pages`)
+Individual pages within a project (part of spreads).
+
+**Schema:**
+```sql
+CREATE TABLE public.pages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  page_number INT NOT NULL,
+  title VARCHAR(255),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(project_id, page_number)
+);
+```
+
+**Relationships:**
+- **N:1** with `projects` (many pages belong to one project)
+- **1:N** with `zones` (a page has many zones)
+
+**Key Points:**
+- Pages ONLY belong to projects (no template relationship)
+- Pages are created in pairs (spreads: left + right)
+- Page numbers are unique within a project
+- Users can only access pages from their own projects (RLS enforced)
+
+---
+
+#### 4. **layouts** (`public.layouts`)
+Reusable layout templates defining zone configurations.
+
+**Schema:**
+```sql
+CREATE TABLE public.layouts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug VARCHAR(50) NOT NULL UNIQUE,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  icon VARCHAR(50),
+  thumbnail_url TEXT,
+  is_system BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Relationships:**
+- **1:N** with `zones` (layout template zones)
+
+**Key Points:**
+- System layouts (blank, single, double, triple, grid-4, grid-6) cannot be deleted
+- Admins can create custom layouts
+- All users can view active layouts
+
+---
+
+#### 5. **zones** (`public.zones`)
+**UNIFIED TABLE**: Serves both layout templates (layout_id) and page instances (page_id).
+
+**Schema:**
+```sql
+CREATE TABLE public.zones (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  layout_id UUID REFERENCES public.layouts(id) ON DELETE CASCADE,
+  page_id UUID REFERENCES public.pages(id) ON DELETE CASCADE,
+  zone_index INT NOT NULL,
+  zone_type VARCHAR(10) NOT NULL DEFAULT 'photo' CHECK (zone_type IN ('photo', 'text')),
+  position_x FLOAT NOT NULL,  -- Percentage (0-100)
+  position_y FLOAT NOT NULL,  -- Percentage (0-100)
+  width FLOAT NOT NULL,       -- Percentage (0-100)
+  height FLOAT NOT NULL,      -- Percentage (0-100)
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CHECK (
+    (layout_id IS NOT NULL AND page_id IS NULL) OR
+    (page_id IS NOT NULL AND layout_id IS NULL)
+  ),
+  UNIQUE(layout_id, zone_index),
+  UNIQUE(page_id, zone_index)
+);
+```
+
+**Relationships:**
+- **N:1** with `layouts` (layout zones belong to a layout)
+- **N:1** with `pages` (page zones belong to a page)
+- **1:1** with `elements` (a zone has at most one element)
+
+**Key Points:**
+- **Layout zones** (`layout_id` set): Template definitions for reuse
+- **Page zones** (`page_id` set): Actual zones on user pages (copied from layouts)
+- Users can customize zone positions/sizes after applying a layout
+- Positions are percentages (0-100) for responsive rendering
+- Deleting a zone cascades to delete its element (1:1 relationship)
+
+---
+
+#### 6. **elements** (`public.elements`)
+**ONE-TO-ONE WITH ZONES**: Photos or text within a zone.
+
+**Schema:**
+```sql
+CREATE TABLE public.elements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  zone_id UUID NOT NULL UNIQUE REFERENCES public.zones(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL CHECK (type IN ('photo', 'text')),
+
+  -- Photo fields
+  photo_url TEXT,
+  photo_storage_path TEXT,
+
+  -- Text fields
+  text_content TEXT,
+  font_family VARCHAR(100),
+  font_size INT,
+  font_color VARCHAR(20),
+  font_weight VARCHAR(20) DEFAULT 'normal',
+  font_style VARCHAR(20) DEFAULT 'normal',
+  text_align VARCHAR(20) DEFAULT 'left',
+  text_decoration VARCHAR(20) DEFAULT 'none',
+
+  -- Position/size RELATIVE TO ZONE (for cropping/zooming)
+  position_x FLOAT NOT NULL,
+  position_y FLOAT NOT NULL,
+  width FLOAT NOT NULL,
+  height FLOAT NOT NULL,
+  rotation FLOAT DEFAULT 0,
+
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Relationships:**
+- **1:1** with `zones` (one zone has exactly one element)
+
+**Key Points:**
+- Elements are **directly related to zones** via `zone_id` (NOT to pages)
+- **UNIQUE constraint on zone_id** enforces 1:1 relationship
+- One zone = one element maximum (no layering, no z_index)
+- Position/size are relative to the zone (for panning/zooming within zone)
+- Deleting a zone automatically deletes its element (cascade)
+- Users can only access elements from their own project zones (RLS enforced via zones → pages → projects chain)
+
+---
+
+#### 7. **templates** (`public.templates`)
+Pre-designed photobook templates for users to start from.
+
+**Schema:**
+```sql
+CREATE TABLE public.templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug VARCHAR(100) NOT NULL UNIQUE,
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  category_id UUID REFERENCES public.template_categories(id) ON DELETE SET NULL,
+  thumbnail_url TEXT,
+  preview_images JSONB,
+  is_featured BOOLEAN DEFAULT FALSE,
+  is_premium BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  page_count INT CHECK (page_count IN (30, 40)),
+  paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Relationships:**
+- **N:1** with `template_categories`
+- **1:N** with `projects` (optional reference)
+
+**Key Points:**
+- Templates provide preset configurations for projects
+- Admins can create/manage templates
+- All users can view active templates
+
+---
+
+#### 8. **vouchers** (`public.vouchers`)
+Pre-generated voucher codes for photobook redemption.
+
+**Schema:**
+```sql
+CREATE TABLE public.vouchers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code VARCHAR(50) NOT NULL UNIQUE,
+  status VARCHAR(20) DEFAULT 'not_redeemed',
+  -- Status: not_redeemed, being_redeemed, fully_redeemed
+  page_count INT CHECK (page_count IN (30, 40)),
+  paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only')),
+  project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL,
+  redeemed_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  redeemed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Relationships:**
+- **1:1** with `projects` (optional, voucher can be linked to a project)
+- **N:1** with `profiles` (optional, user who redeemed)
+
+**Key Points:**
+- Three-state lifecycle: not_redeemed → being_redeemed → fully_redeemed
+- Admins create vouchers with product configuration
+- Users validate and apply vouchers during project creation
+- Voucher reverts to `not_redeemed` if draft project is deleted
+
+---
+
+#### 9. **waitlist** (`public.waitlist`)
+Email waitlist for "Coming Soon" mode.
+
+**Schema:**
+```sql
+CREATE TABLE public.waitlist (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email VARCHAR(255) NOT NULL UNIQUE,
+  ip_address INET,
+  user_agent TEXT,
+  unsubscribed BOOLEAN DEFAULT FALSE,
+  unsubscribed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Key Points:**
+- No RLS (safe for public submissions)
+- Unique email constraint prevents duplicates
+- IP and user agent tracking for spam prevention
+
+---
+
+### Entity Relationship Diagram
+
+```
+┌─────────────┐
+│ auth.users  │ (Supabase managed)
+└──────┬──────┘
+       │
+       │ 1:1
+       ↓
+┌─────────────┐
+│  profiles   │ (user details + is_admin)
+└──────┬──────┘
+       │
+       │ 1:N
+       ↓
+┌─────────────┐      N:1        ┌──────────────┐
+│  projects   │◄─────────────────│  templates   │
+└──────┬──────┘                  └──────────────┘
+       │
+       │ 1:N
+       ↓
+┌─────────────┐
+│    pages    │ (spreads in project)
+└──────┬──────┘
+       │
+       │ 1:N
+       ↓
+┌─────────────┐      N:1        ┌──────────────┐
+│    zones    │◄─────────────────│   layouts    │
+│  (unified)  │                  │  (templates) │
+└──────┬──────┘                  └──────────────┘
+       │
+       │ 1:N
+       ↓
+┌─────────────┐
+│  elements   │ (photos/text in zones)
+└─────────────┘
+
+Additional:
+┌──────────────┐      N:1        ┌──────────────────────┐
+│  templates   │◄─────────────────│ template_categories  │
+└──────────────┘                  └──────────────────────┘
+
+┌──────────────┐      1:1        ┌─────────────┐
+│  vouchers    │◄─────────────────│  projects   │
+└──────────────┘                  └─────────────┘
+```
+
+### Access Control (RLS Policies)
+
+**profiles**:
+- Users can view/update their own profile
+- Auto-created on signup
+
+**projects**:
+- Users can CRUD their own projects
+- Filtering: `user_id = auth.uid()`
+
+**pages**:
+- Users can CRUD pages from their own projects
+- Filtering: `EXISTS (projects WHERE user_id = auth.uid())`
+
+**zones**:
+- Layout zones: Anyone can view active layouts (admins can manage)
+- Page zones: Users can manage zones on their own project pages
+- Filtering: `EXISTS (pages → projects WHERE user_id = auth.uid())`
+
+**elements**:
+- Users can CRUD elements in zones on their own project pages
+- Filtering: `EXISTS (zones → pages → projects WHERE user_id = auth.uid())`
+
+**layouts/templates/categories**:
+- All users can view active entries
+- Only admins can create/update/delete
+
+**vouchers**:
+- All authenticated users can view and redeem vouchers
+- Only admins can create/delete vouchers
+
+### Storage Buckets
+
+**project-photos** (private):
+- User uploads: `{user_id}/{project_id}/{filename}`
+- RLS policies enforce user_id folder access
+- Max file size: 10MB
+- Signed URLs (1-year expiry)
+
+**template-assets** (public):
+- Admin uploads: template thumbnails and previews
+- Public read access
+- Admin-only write access
+
+### Triggers
+
+1. **on_auth_user_created**: Auto-creates profile when user signs up
+2. **on_profile_updated**: Updates `updated_at` timestamp
+3. **on_page_modified**: Updates project's `last_edited_at` when pages change
+4. **on_element_modified**: Updates project's `last_edited_at` when elements change (via zones → pages → projects chain)
+5. **on_zone_updated**: Updates `updated_at` timestamp
+
+### Important Design Decisions
+
+1. **One-to-One: Elements ↔ Zones**:
+   - **UNIQUE constraint on `zone_id`** enforces strict 1:1 relationship
+   - One zone can have at most one element (photo or text)
+   - Simplifies state management: no z_index, no layering
+   - Clear semantics: zone = container, element = content
+
+2. **Elements → Zones (NOT Pages)**:
+   - Elements have direct FK to zones (`zone_id`), not to pages
+   - Cleaner relationships: element position is relative to its zone
+   - Cascade deletes work correctly: delete zone → deletes element
+
+3. **Pages → Projects ONLY**:
+   - Pages do NOT have `template_id` relationship
+   - Templates define configurations, not page instances
+   - Simpler data model: pages always belong to projects
+
+4. **Unified Zones Table**:
+   - Single table for layout template zones and page zones
+   - CHECK constraint ensures exactly one of `layout_id` or `page_id` is set
+   - Reduces duplication and simplifies queries
+
+5. **Percentage-Based Positioning**:
+   - All positions/sizes stored as percentages (0-100)
+   - Responsive rendering across different screen sizes
+   - Element positions relative to zone (for cropping/panning)
+
+### Complete Schema Reference
+
+See [sql/setup.sql](sql/setup.sql) for the complete schema with all constraints, indexes, and RLS policies.
+
+For database reset (non-production): [sql/reset.sql](sql/reset.sql)
+
+---
+
 ## Components
 
 ### Header ([components/header.tsx](components/header.tsx))
@@ -752,15 +1219,13 @@ KEEPERS includes a full-featured photobook editor that allows authenticated user
 
 **Elements** (`public.elements`)
 - `id` (UUID) - Primary key
-- `page_id` (UUID) - Parent page
-- `zone_index` (INT) - Optional zone assignment
+- `zone_id` (UUID) - Parent zone (UNIQUE - 1:1 relationship)
 - `type` (VARCHAR) - 'photo' or 'text'
 - `photo_url` (TEXT) - Signed URL for display
 - `photo_storage_path` (TEXT) - Storage path for regenerating URLs
-- `position_x`, `position_y` (FLOAT) - Position as percentage (0-100)
-- `width`, `height` (FLOAT) - Size as percentage (0-100)
+- `position_x`, `position_y` (FLOAT) - Position as percentage (0-100) relative to zone
+- `width`, `height` (FLOAT) - Size as percentage (0-100) relative to zone
 - `rotation` (FLOAT) - Rotation in degrees
-- `z_index` (INT) - Layer order
 - `created_at`, `updated_at` (TIMESTAMPTZ)
 
 ### Zone-Based Layout System
@@ -1010,12 +1475,17 @@ KEEPERS includes a database-backed template system that allows users to create p
 - `is_active` (BOOLEAN) - Visibility to users
 - `sort_order` (INT) - Display order
 
-**Layout Zones** (`public.layout_zones`)
+**Zones** (`public.zones`) - **Unified table for both layout and page zones**
 - `id` (UUID) - Primary key
-- `layout_id` (UUID) - Parent layout
+- `layout_id` (UUID) - Parent layout (NULL for page zones)
+- `page_id` (UUID) - Parent page (NULL for layout zones)
 - `zone_index` (INT) - Zone order
+- `zone_type` (VARCHAR) - 'photo' or 'text'
 - `position_x`, `position_y` (FLOAT) - Position as percentage (0-100)
 - `width`, `height` (FLOAT) - Size as percentage (0-100)
+- **CHECK constraint:** Exactly one of `layout_id` or `page_id` must be set
+
+**Note:** Zones serve dual purposes - as layout templates (layout_id set) and as page instances (page_id set). When a user applies a layout to a page, zones are copied from layout zones to page zones.
 
 **Template Categories** (`public.template_categories`)
 - `id` (UUID) - Primary key
@@ -1029,26 +1499,17 @@ KEEPERS includes a database-backed template system that allows users to create p
 **Templates** (`public.templates`)
 - `id` (UUID) - Primary key
 - `slug` (VARCHAR) - Unique identifier
-- `name` (VARCHAR) - Template name
+- `title` (VARCHAR) - Template name
 - `description` (TEXT) - Template description
 - `category_id` (UUID) - Parent category
+- `project_id` (UUID UNIQUE) - **1-1 mapping to projects table** - the template project blueprint
 - `thumbnail_url` (TEXT) - Preview image
 - `preview_images` (JSONB) - Additional preview images
-- `page_count` (INT) - Number of pages
 - `is_featured` (BOOLEAN) - Show in featured section
 - `is_premium` (BOOLEAN) - Future: paid templates
 - `is_active` (BOOLEAN) - Visibility
 
-**Template Pages** (`public.template_pages`)
-- `id` (UUID) - Primary key
-- `template_id` (UUID) - Parent template
-- `page_number` (INT) - Page order
-- `layout_id` (UUID) - Layout for this page
-- `title` (VARCHAR) - Optional page title
-
-**Template Elements** (`public.template_elements`)
-- Pre-placed text/decoration elements on template pages
-- Same positioning fields as regular elements
+**Important:** Templates no longer have `page_count` or `paper_size` fields. These belong to projects only. Each template references exactly one "template project" that contains pages and zones. When a user creates a project from a template, the entire template project (including pages and zones) is copied, creating a completely independent new project with no ongoing relationship to the template.
 
 ### Server Actions
 
@@ -1091,6 +1552,159 @@ KEEPERS includes a database-backed template system that allows users to create p
 - Stores template thumbnails and preview images
 - Admin-only upload access
 - Public read access
+
+---
+
+## Key Design Decisions
+
+### Overview
+
+This section documents the core architectural decisions made for the KEEPERS photobook system. These decisions prioritize **simplicity**, **user freedom**, and **data independence** over normalization and template synchronization.
+
+### 1. Templates and Projects: 1-1 Mapping with Copy-on-Create
+
+**Decision:** Each template has exactly one associated "template project" (via `project_id` UNIQUE constraint). When a user creates a project from a template, **the entire template project is copied** (including all pages and zones) into a new, independent user project.
+
+**Why:**
+- **User Freedom:** Users can fully customize their project without affecting the template or other users
+- **No Template Lock-in:** Projects remain functional even if the template is deleted or modified
+- **Simple Mental Model:** Templates are boilerplates - use once, no ongoing relationship
+- **Data Independence:** Each project is self-contained with all its data
+
+**Tradeoffs:**
+- ✅ Complete user control and customization freedom
+- ✅ No cascade failures if templates change
+- ✅ Simple to implement and reason about
+- ❌ Data duplication - 1,000 users = 1,000 copies of zones
+- ❌ Template updates don't benefit existing projects
+- ❌ More storage usage
+
+**Implementation:**
+- Templates table has `project_id UUID UNIQUE` field
+- Projects table has NO `template_id` field (templates reference projects, not vice versa)
+- `createProjectFromTemplate()` deep-copies project → pages → zones → elements
+- Templates do NOT have `page_count` or `paper_size` (these belong to projects)
+
+### 2. Layouts and Pages: Copy-on-Apply
+
+**Decision:** When a user applies a layout to a page, **zones are copied** from layout zones to page zones. The copied zones have NO ongoing relationship to the layout.
+
+**Why:**
+- **Consistency with Templates:** Same "boilerplate" pattern as templates
+- **User Customization:** Users can resize/reposition zones after applying layout
+- **No Layout Lock-in:** Page zones persist even if layout is deleted
+
+**Tradeoffs:**
+- ✅ Users can customize zones freely
+- ✅ Simple mental model - layouts are blueprints
+- ❌ Layout updates don't affect existing pages
+- ❌ Zone data duplication
+
+**Implementation:**
+- Layouts have zones (via `zones` table with `layout_id` set)
+- Pages have zones (via `zones` table with `page_id` set)
+- When layout is applied, zones are copied and `page_id` is set
+
+### 3. Unified Zones Table (Layout + Page)
+
+**Decision:** Use a single `zones` table with a CHECK constraint ensuring exactly one of `layout_id` OR `page_id` is set, rather than separate `layout_zones` and `page_zones` tables.
+
+**Why:**
+- **Schema Simplicity:** One table instead of two with identical structure
+- **Shared Structure:** Both layout and page zones have identical fields (position, size, zone_type)
+- **Unified Element References:** Elements reference `zone_id` without needing to know if it's a layout or page zone
+
+**Tradeoffs:**
+- ✅ Less schema duplication
+- ✅ Simpler foreign key relationships
+- ✅ One source of truth for zone structure
+- ❌ Mixed concerns in one table (templates vs instances)
+- ❌ Nullable FKs require CHECK constraint discipline
+- ❌ Queries need WHERE clause filtering by layout_id or page_id
+
+**Implementation:**
+```sql
+CREATE TABLE zones (
+  id UUID PRIMARY KEY,
+  layout_id UUID REFERENCES layouts(id) ON DELETE CASCADE,
+  page_id UUID REFERENCES pages(id) ON DELETE CASCADE,
+  zone_index INT NOT NULL,
+  zone_type VARCHAR(10) DEFAULT 'photo',
+  position_x FLOAT, position_y FLOAT, width FLOAT, height FLOAT,
+  CHECK (
+    (layout_id IS NOT NULL AND page_id IS NULL) OR
+    (page_id IS NOT NULL AND layout_id IS NULL)
+  ),
+  UNIQUE(layout_id, zone_index),
+  UNIQUE(page_id, zone_index)
+);
+```
+
+### 4. Elements and Zones: 1-1 Mapping
+
+**Decision:** Each zone can have AT MOST one element (enforced via `UNIQUE(zone_id)` constraint on elements table).
+
+**Why:**
+- **Simple Layout Model:** Each photo zone gets one photo
+- **No Layering Complexity:** No z-index calculations or layer management
+- **Clear User Model:** One rectangle = one photo
+
+**Tradeoffs:**
+- ✅ Extremely simple to implement and understand
+- ✅ No layering/z-index bugs
+- ✅ Clear 1-1 relationship in UI
+- ❌ Can't layer multiple photos/text in one zone
+- ❌ Advanced layouts require multiple zones
+
+**Implementation:**
+```sql
+CREATE TABLE elements (
+  id UUID PRIMARY KEY,
+  zone_id UUID NOT NULL UNIQUE REFERENCES zones(id), -- 1-1 constraint
+  type VARCHAR(10) CHECK (type IN ('photo', 'text')),
+  -- ... other fields (position, size, rotation)
+);
+```
+
+### 5. Projects and Pages: ONLY Relationship
+
+**Decision:** Pages ONLY belong to projects. Pages do NOT have a `template_id` field. Templates are referenced only through the template → project relationship.
+
+**Why:**
+- **Clear Ownership:** Every page belongs to exactly one project
+- **Simple Queries:** No need to check "is this a template page or project page?"
+- **Consistency:** Templates ARE projects (via 1-1 mapping)
+
+**Implementation:**
+```sql
+CREATE TABLE pages (
+  id UUID PRIMARY KEY,
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  page_number INT NOT NULL,
+  -- NO template_id field
+  UNIQUE(project_id, page_number)
+);
+```
+
+### Summary: Boilerplate Philosophy
+
+The overarching philosophy is: **Templates and layouts are boilerplates - one-time copy, no ongoing relationship.**
+
+This prioritizes:
+- User freedom to customize
+- Data independence
+- Simple mental models
+- Implementation simplicity
+
+Over:
+- Storage efficiency
+- Template synchronization
+- Schema normalization
+
+**When to Reconsider:**
+- If template updates need to propagate to existing projects → Consider reference-based system
+- If storage costs become prohibitive → Consider shared zone definitions
+- If users complain about customization limits → Current design already maximizes this
 
 ---
 

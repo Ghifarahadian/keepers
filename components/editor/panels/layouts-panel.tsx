@@ -65,16 +65,15 @@ export function LayoutsPanel() {
       const layout = layouts.find(l => l.id === layoutId)
       if (!layout) return
 
-      // Delete all existing elements on this page
-      const existingElements = state.elements[currentPage.id] || []
-      for (const element of existingElements) {
-        await deleteElement(element.id)
-        dispatch({ type: "DELETE_ELEMENT", payload: { pageId: currentPage.id, elementId: element.id } })
-      }
-
-      // Delete all existing zones
+      // Delete all existing zones (this will cascade delete elements due to FK constraint)
       const existingZones = state.zones[currentPage.id] || []
       for (const zone of existingZones) {
+        // Delete elements in this zone from local state
+        const zoneElements = state.elements[zone.id] || []
+        for (const element of zoneElements) {
+          dispatch({ type: "DELETE_ELEMENT", payload: { zoneId: zone.id, elementId: element.id } })
+        }
+        // Delete zone from database (will cascade delete elements)
         await deleteZone(zone.id)
       }
 
@@ -91,6 +90,11 @@ export function LayoutsPanel() {
           height: layoutZone.height,
         })
         newZones.push(zone)
+        // Initialize empty elements array for new zone
+        dispatch({
+          type: "SET_ELEMENTS",
+          payload: { zoneId: zone.id, elements: [] },
+        })
       }
 
       // Update zones in state

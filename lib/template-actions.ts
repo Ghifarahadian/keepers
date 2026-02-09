@@ -292,7 +292,6 @@ export async function createProjectFromTemplate(
           width: element.width,
           height: element.height,
           rotation: element.rotation,
-          z_index: element.z_index,
         }))
 
         const { error: elementsError } = await supabase

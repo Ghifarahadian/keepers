@@ -91,7 +91,7 @@ function EditorContent() {
         dispatch({
           type: "UPDATE_ELEMENT",
           payload: {
-            pageId: element.page_id,
+            zoneId: element.zone_id,
             elementId: element.id,
             updates: {
               photo_url: photo.url,
@@ -105,15 +105,13 @@ function EditorContent() {
       // Dropping on a zone - create new photo element in that zone
       if (dropTarget?.type === "zone") {
         const zone = dropTarget.zone
-        const targetPageId = dropTarget.pageId
 
-        if (!zone || !targetPageId) return
+        if (!zone) return
 
-        // Create new photo element filling the zone
-        await addElementToCanvas(targetPageId, {
+        // Create new photo element filling the zone (1:1 zone-element relationship)
+        await addElementToCanvas(zone.id, {
           type: "photo",
-          page_id: targetPageId,
-          zone_index: zone.zone_index,
+          zone_id: zone.id,
           photo_url: photo.url,
           photo_storage_path: photo.path,
           // Fill the zone initially (100% of zone size)
@@ -122,7 +120,6 @@ function EditorContent() {
           width: 100,
           height: 100,
           rotation: 0,
-          z_index: state.elements[targetPageId]?.length || 0,
         })
         return
       }
@@ -135,18 +132,23 @@ function EditorContent() {
 
       const elementType = dragData.elementType
 
-      // Create element at center of canvas with default size
-      // TODO: In zone-based system, should drop into specific zone instead of default
-      addElementToCanvas(targetPageId, {
+      // Get first zone on the target page
+      const pageZones = state.zones[targetPageId] || []
+      if (pageZones.length === 0) {
+        console.warn("Cannot add element: page has no zones. Apply a layout first.")
+        return
+      }
+      const firstZone = pageZones[0]
+
+      // Create element in first zone with default size
+      addElementToCanvas(firstZone.id, {
         type: elementType === "picture" ? "photo" : "text",
-        page_id: targetPageId,
-        zone_index: 0, // Default to first zone
+        zone_id: firstZone.id,
         position_x: 25,
         position_y: 25,
         width: 50,
         height: 50,
         rotation: 0,
-        z_index: state.elements[targetPageId]?.length || 0,
       })
     }
   }

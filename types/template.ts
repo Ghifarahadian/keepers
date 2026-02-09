@@ -56,16 +56,14 @@ export interface Template {
   description: string | null
   category_id: string | null
   category?: TemplateCategory | null // Joined from template_categories
+  project_id: string | null // 1-1 mapping to projects table
   thumbnail_url: string | null
   preview_images: string[] | null // JSONB array
   is_featured: boolean
   is_premium: boolean
   is_active: boolean
-  page_count: PageCount | null
-  paper_size: PaperSize | null
   created_at: string
   updated_at: string
-  pages?: Page[] // Template pages (pages with template_id set)
 }
 
 // ============================================
@@ -122,25 +120,23 @@ export interface CreateTemplateInput {
   title: string
   description?: string
   category_id?: string
+  project_id: string // Required: the template project to copy from
   thumbnail_url?: string
   preview_images?: string[]
   is_featured?: boolean
   is_premium?: boolean
-  page_count?: PageCount
-  paper_size?: PaperSize
 }
 
 export interface UpdateTemplateInput {
   title?: string
   description?: string
   category_id?: string
+  project_id?: string
   thumbnail_url?: string
   preview_images?: string[]
   is_featured?: boolean
   is_premium?: boolean
   is_active?: boolean
-  page_count?: PageCount
-  paper_size?: PaperSize
 }
 
 // ============================================
@@ -163,7 +159,6 @@ export interface AdminProject {
   title: string
   cover_photo_url: string | null
   status: 'draft' | 'processed' | 'shipped' | 'completed'
-  template_id: string | null // References templates.id
 
   // Product configuration
   page_count: PageCount | null
@@ -184,11 +179,4 @@ export interface AdminProject {
     last_name: string | null
     email: string | null
   }
-
-  // Joined template data (if project was created from template)
-  template?: {
-    id: string
-    slug: string
-    title: string
-  } | null
 }

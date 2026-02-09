@@ -14,7 +14,6 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
   })
 
   const zones = page ? (state.zones[page.id] || []) : []
-  const elements = page ? (state.elements[page.id] || []) : []
   const isActive = state.activePageSide === side
 
   const handleClick = () => {
@@ -41,8 +40,8 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
       {page ? (
         // Render zones (which contain elements)
         zones.map((zone) => {
-          // Find elements that belong to this zone
-          const zoneElements = elements.filter(el => el.zone_index === zone.zone_index)
+          // Get elements for this zone from state.elements (keyed by zoneId)
+          const zoneElements = state.elements[zone.id] || []
           return (
             <ZoneContainer
               key={zone.id}

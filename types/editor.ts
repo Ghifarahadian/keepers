@@ -26,7 +26,6 @@ export interface Project {
   title: string
   cover_photo_url?: string | null
   status: ProjectStatus
-  template_id?: string | null // References templates.id (NULL for blank projects)
 
   // Product configuration
   page_count?: PageCount | null
@@ -44,14 +43,12 @@ export interface Project {
 
 export interface Page {
   id: string
-  project_id: string | null // NULL for template pages
-  template_id: string | null // Set for template pages, NULL for project pages
+  project_id: string // Pages always belong to a project
   page_number: number
   title?: string | null
   created_at: string
   updated_at: string
   zones?: Zone[]
-  elements?: Element[]
 }
 
 // Unified zone type - can belong to either a page OR a layout
@@ -74,9 +71,8 @@ export type PageZone = Zone
 
 export interface Element {
   id: string
-  page_id: string
+  zone_id: string // Foreign key to zones table
   type: ElementType
-  zone_index: number // REQUIRED: Index of zone this element belongs to
 
   // Photo fields
   photo_url?: string | null
@@ -100,7 +96,6 @@ export interface Element {
   width: number
   height: number
   rotation: number
-  z_index: number
 
   created_at: string
   updated_at: string
@@ -136,7 +131,7 @@ export interface EditorState {
   currentSpreadIndex: number // Index of current spread (0 = pages 0-1, 1 = pages 2-3, etc.)
   activePageSide: 'left' | 'right' // Which page in the spread is active for editing
   zones: Record<string, Zone[]> // Keyed by pageId (only page zones, layout zones not stored here)
-  elements: Record<string, Element[]> // Keyed by pageId
+  elements: Record<string, Element[]> // Keyed by zoneId (elements now belong to zones)
   uploadedPhotos: UploadedPhoto[]
   selectedElementId: string | null
   selectedZoneId: string | null // For selecting empty zones
@@ -158,10 +153,10 @@ export type EditorAction =
   | { type: 'REORDER_PAGES'; payload: Page[] }
   | { type: 'SET_ZONES'; payload: { pageId: string; zones: Zone[] } }
   | { type: 'UPDATE_ZONE'; payload: { pageId: string; zoneId: string; updates: Partial<Zone> } }
-  | { type: 'SET_ELEMENTS'; payload: { pageId: string; elements: Element[] } }
-  | { type: 'ADD_ELEMENT'; payload: { pageId: string; element: Element } }
-  | { type: 'UPDATE_ELEMENT'; payload: { pageId: string; elementId: string; updates: Partial<Element> } }
-  | { type: 'DELETE_ELEMENT'; payload: { pageId: string; elementId: string } }
+  | { type: 'SET_ELEMENTS'; payload: { zoneId: string; elements: Element[] } }
+  | { type: 'ADD_ELEMENT'; payload: { zoneId: string; element: Element } }
+  | { type: 'UPDATE_ELEMENT'; payload: { zoneId: string; elementId: string; updates: Partial<Element> } }
+  | { type: 'DELETE_ELEMENT'; payload: { zoneId: string; elementId: string } }
   | { type: 'SELECT_ELEMENT'; payload: string | null }
   | { type: 'SELECT_ZONE'; payload: string | null }
   | { type: 'ADD_UPLOADED_PHOTO'; payload: UploadedPhoto }
@@ -178,7 +173,6 @@ export type EditorAction =
 
 export interface CreateProjectInput {
   title?: string
-  template_id?: string // Optional: create from template
   page_count?: PageCount
   paper_size?: PaperSize
   voucher_code?: string
@@ -194,8 +188,7 @@ export interface UpdateProjectInput {
 }
 
 export interface CreatePageInput {
-  project_id?: string // Required for project pages
-  template_id?: string // Required for template pages
+  project_id: string // Pages always belong to a project
   page_number: number
   title?: string
 }
@@ -223,9 +216,8 @@ export interface UpdateZoneInput {
 }
 
 export interface CreateElementInput {
-  page_id: string
+  zone_id: string // Foreign key to zones table
   type: ElementType
-  zone_index: number // REQUIRED: Zone this element belongs to
   photo_url?: string
   photo_storage_path?: string
   text_content?: string
@@ -241,11 +233,10 @@ export interface CreateElementInput {
   width: number // Width relative to zone
   height: number // Height relative to zone
   rotation?: number
-  z_index?: number
 }
 
 export interface UpdateElementInput {
-  zone_index?: number // Optional: Update zone assignment
+  zone_id?: string // Optional: Update zone assignment
   photo_url?: string | null
   photo_storage_path?: string | null
   text_content?: string | null
@@ -261,7 +252,6 @@ export interface UpdateElementInput {
   width?: number // Width relative to zone
   height?: number // Height relative to zone
   rotation?: number
-  z_index?: number
 }
 
 // ============================================

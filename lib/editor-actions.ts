@@ -73,13 +73,11 @@ export async function createProject(
 
     pagesToCreate.push({
       project_id: project.id,
-      template_id: null,
       page_number: leftPageNumber,
     })
 
     pagesToCreate.push({
       project_id: project.id,
-      template_id: null,
       page_number: rightPageNumber,
     })
   }
@@ -103,7 +101,7 @@ export async function createProject(
 
   return {
     ...project,
-    pages: pages.map(page => ({ ...page, zones: [], elements: [] })),
+    pages: pages.map(page => ({ ...page, zones: [] })),
   }
 }
 
@@ -115,7 +113,7 @@ export async function getProject(projectId: string): Promise<Project | null> {
 
   if (!user) return null
 
-  // Get project with pages, zones, and elements
+  // Get project with pages and zones
   const { data: project, error } = await supabase
     .from("projects")
     .select(
@@ -123,8 +121,7 @@ export async function getProject(projectId: string): Promise<Project | null> {
       *,
       pages (
         *,
-        zones:page_zones (*),
-        elements (*)
+        zones (*)
       )
     `
     )
@@ -149,17 +146,47 @@ export async function getProject(projectId: string): Promise<Project | null> {
     return null
   }
 
-  // Sort pages by page_number, zones by zone_index, and elements by z_index
+  // Get all zone IDs from all pages
+  const allZoneIds: string[] = []
+  if (project.pages) {
+    project.pages.forEach((page: any) => {
+      if (page.zones) {
+        page.zones.forEach((zone: any) => {
+          allZoneIds.push(zone.id)
+        })
+      }
+    })
+  }
+
+  // Fetch elements for all zones
+  let allElements: Element[] = []
+  if (allZoneIds.length > 0) {
+    const { data: elements, error: elementsError } = await supabase
+      .from("elements")
+      .select("*")
+      .in("zone_id", allZoneIds)
+
+    if (elementsError) {
+      console.error("Error fetching elements:", elementsError)
+    } else if (elements) {
+      allElements = elements as Element[]
+    }
+  }
+
+  // Sort pages by page_number and zones by zone_index
+  // Attach elements to zones
   if (project && project.pages) {
     project.pages = project.pages
       .sort((a: Page, b: Page) => a.page_number - b.page_number)
       .map((page: any) => ({
         ...page,
         zones: page.zones
-          ? page.zones.sort((a: any, b: any) => a.zone_index - b.zone_index)
-          : [],
-        elements: page.elements
-          ? page.elements.sort((a: Element, b: Element) => a.z_index - b.z_index)
+          ? page.zones
+              .sort((a: any, b: any) => a.zone_index - b.zone_index)
+              .map((zone: any) => ({
+                ...zone,
+                elements: allElements.filter((el) => el.zone_id === zone.id),
+              }))
           : [],
       }))
   }
@@ -286,8 +313,7 @@ export async function createPage(input: CreatePageInput): Promise<Page> {
   const { data: page, error } = await supabase
     .from("pages")
     .insert({
-      project_id: input.project_id || null,
-      template_id: input.template_id || null,
+      project_id: input.project_id,
       page_number: input.page_number,
       title: input.title,
     })
@@ -298,7 +324,7 @@ export async function createPage(input: CreatePageInput): Promise<Page> {
 
   // Note: Page starts with no zones. User adds zones by applying a layout.
   revalidatePath(`/editor/${input.project_id}`)
-  return { ...page, zones: [], elements: [] } as Page
+  return { ...page, zones: [] } as Page
 }
 
 export async function updatePage(
@@ -483,9 +509,8 @@ export async function createElement(
   const { data: element, error } = await supabase
     .from("elements")
     .insert({
-      page_id: input.page_id,
+      zone_id: input.zone_id,
       type: input.type,
-      zone_index: input.zone_index,
       photo_url: input.photo_url,
       photo_storage_path: input.photo_storage_path,
       text_content: input.text_content,
@@ -501,7 +526,6 @@ export async function createElement(
       width: input.width,
       height: input.height,
       rotation: input.rotation || 0,
-      z_index: input.z_index || 0,
     })
     .select()
     .single()

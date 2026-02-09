@@ -111,6 +111,18 @@ interface Spread {
 export function EditorPagebar() {
   const { state, setCurrentSpread, dispatch } = useEditor()
 
+  // Helper: Get all elements for a page by aggregating from all zones
+  const getPageElements = useMemo(() => (page: Page | null): Element[] => {
+    if (!page) return []
+    const zones = state.zones[page.id] || []
+    const allElements: Element[] = []
+    zones.forEach(zone => {
+      const zoneElements = state.elements[zone.id] || []
+      allElements.push(...zoneElements)
+    })
+    return allElements
+  }, [state.zones, state.elements])
+
   // Calculate spreads from pages
   const spreads = useMemo((): Spread[] => {
     const result: Spread[] = []
@@ -203,14 +215,14 @@ export function EditorPagebar() {
               {/* Left page thumbnail */}
               <PageThumbnail
                 page={spread.leftPage}
-                elements={spread.leftPage ? (state.elements[spread.leftPage.id] || []) : []}
+                elements={getPageElements(spread.leftPage)}
                 uploadedPhotos={state.uploadedPhotos}
                 isDragging={state.isDragging}
               />
               {/* Right page thumbnail */}
               <PageThumbnail
                 page={spread.rightPage}
-                elements={spread.rightPage ? (state.elements[spread.rightPage.id] || []) : []}
+                elements={getPageElements(spread.rightPage)}
                 uploadedPhotos={state.uploadedPhotos}
                 isDragging={state.isDragging}
               />

@@ -5,28 +5,39 @@ import type { Project, Page, PageZone, Element, EditorState, EditorAction, Uploa
 import { updateProject, updateElement, createElement, deleteElement, updateZone } from "@/lib/editor-actions"
 
 // Initial state
-const createInitialState = (project: Project, uploadedPhotos?: UploadedPhoto[]): EditorState => ({
-  project,
-  pages: project.pages || [],
-  currentSpreadIndex: 0, // Start at first spread (pages 0-1)
-  activePageSide: 'right', // Default to right page (front cover on first spread)
-  zones: project.pages?.reduce((acc, page) => {
-    acc[page.id] = page.zones || []
-    return acc
-  }, {} as Record<string, PageZone[]>) || {},
-  elements: project.pages?.reduce((acc, page) => {
-    acc[page.id] = page.elements || []
-    return acc
-  }, {} as Record<string, Element[]>) || {},
-  uploadedPhotos: uploadedPhotos || [],
-  selectedElementId: null,
-  selectedZoneId: null,
-  isSaving: false,
-  lastSaved: null,
-  error: null,
-  isDragging: false,
-  isDraggingZone: false,
-})
+const createInitialState = (project: Project, uploadedPhotos?: UploadedPhoto[]): EditorState => {
+  // Build zones map (keyed by pageId)
+  const zones: Record<string, PageZone[]> = {}
+  project.pages?.forEach(page => {
+    zones[page.id] = page.zones || []
+  })
+
+  // Build elements map (keyed by zoneId)
+  const elements: Record<string, Element[]> = {}
+  project.pages?.forEach(page => {
+    page.zones?.forEach(zone => {
+      // Elements are now attached to zones from the query
+      elements[zone.id] = (zone as any).elements || []
+    })
+  })
+
+  return {
+    project,
+    pages: project.pages || [],
+    currentSpreadIndex: 0, // Start at first spread (pages 0-1)
+    activePageSide: 'right', // Default to right page (front cover on first spread)
+    zones,
+    elements,
+    uploadedPhotos: uploadedPhotos || [],
+    selectedElementId: null,
+    selectedZoneId: null,
+    isSaving: false,
+    lastSaved: null,
+    error: null,
+    isDragging: false,
+    isDraggingZone: false,
+  }
+}
 
 // Reducer
 function editorReducer(state: EditorState, action: EditorAction): EditorState {
@@ -103,30 +114,30 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     case "SET_ELEMENTS":
       return {
         ...state,
-        elements: { ...state.elements, [action.payload.pageId]: action.payload.elements },
+        elements: { ...state.elements, [action.payload.zoneId]: action.payload.elements },
       }
 
     case "ADD_ELEMENT": {
-      const currentElements = state.elements[action.payload.pageId] || []
+      const currentElements = state.elements[action.payload.zoneId] || []
       return {
         ...state,
         elements: {
           ...state.elements,
-          [action.payload.pageId]: [...currentElements, action.payload.element],
+          [action.payload.zoneId]: [...currentElements, action.payload.element],
         },
       }
     }
 
     case "UPDATE_ELEMENT": {
-      const { pageId, elementId, updates } = action.payload
-      const pageElements = state.elements[pageId]
-      if (!pageElements) return state
+      const { zoneId, elementId, updates } = action.payload
+      const zoneElements = state.elements[zoneId]
+      if (!zoneElements) return state
 
       return {
         ...state,
         elements: {
           ...state.elements,
-          [pageId]: pageElements.map((el) =>
+          [zoneId]: zoneElements.map((el) =>
             el.id === elementId ? { ...el, ...updates } : el
           ),
         },
@@ -134,15 +145,15 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case "DELETE_ELEMENT": {
-      const { pageId, elementId } = action.payload
-      const pageElements = state.elements[pageId]
-      if (!pageElements) return state
+      const { zoneId, elementId } = action.payload
+      const zoneElements = state.elements[zoneId]
+      if (!zoneElements) return state
 
       return {
         ...state,
         elements: {
           ...state.elements,
-          [pageId]: pageElements.filter((el) => el.id !== elementId),
+          [zoneId]: zoneElements.filter((el) => el.id !== elementId),
         },
         selectedElementId: state.selectedElementId === elementId ? null : state.selectedElementId,
       }
@@ -207,7 +218,7 @@ interface EditorContextValue {
   setDraggingZone: (isDragging: boolean) => void
 
   // Element actions
-  addElementToCanvas: (pageId: string, element: Omit<Element, "id" | "created_at" | "updated_at">) => Promise<void>
+  addElementToCanvas: (zoneId: string, element: Omit<Element, "id" | "created_at" | "updated_at">) => Promise<void>
   updateElementLocal: (elementId: string, updates: UpdateElementInput) => void
   updateElementPosition: (elementId: string, updates: UpdateElementInput) => Promise<void>
   deleteElementFromCanvas: (elementId: string) => Promise<void>
@@ -321,12 +332,11 @@ export function EditorProvider({
 
   // Add element to canvas
   const addElementToCanvas = useCallback(
-    async (pageId: string, element: Omit<Element, "id" | "created_at" | "updated_at">) => {
+    async (zoneId: string, element: Omit<Element, "id" | "created_at" | "updated_at">) => {
       try {
         const newElement = await createElement({
-          page_id: pageId,
+          zone_id: zoneId,
           type: element.type,
-          zone_index: element.zone_index,
           photo_url: element.photo_url || undefined,
           photo_storage_path: element.photo_storage_path || undefined,
           text_content: element.text_content || undefined,
@@ -342,10 +352,9 @@ export function EditorProvider({
           width: element.width,
           height: element.height,
           rotation: element.rotation || 0,
-          z_index: element.z_index || 0,
         })
 
-        dispatch({ type: "ADD_ELEMENT", payload: { pageId, element: newElement } })
+        dispatch({ type: "ADD_ELEMENT", payload: { zoneId, element: newElement } })
       } catch (error) {
         console.error("Add element error:", error)
         dispatch({ type: "SET_ERROR", payload: "Failed to add element" })
@@ -354,66 +363,79 @@ export function EditorProvider({
     []
   )
 
-  // Helper to find pageId for an element
-  const findElementPageId = useCallback((elementId: string): string | null => {
-    for (const [pageId, elements] of Object.entries(state.elements)) {
+  // Helper to find zoneId for an element
+  const findElementZoneId = useCallback((elementId: string): string | null => {
+    for (const [zoneId, elements] of Object.entries(state.elements)) {
       if (elements.some(el => el.id === elementId)) {
-        return pageId
+        return zoneId
       }
     }
     return null
   }, [state.elements])
 
+  // Helper to find pageId for a zoneId
+  const findPageIdForZone = useCallback((zoneId: string): string | null => {
+    for (const [pageId, zones] of Object.entries(state.zones)) {
+      if (zones.some(zone => zone.id === zoneId)) {
+        return pageId
+      }
+    }
+    return null
+  }, [state.zones])
+
   // Update element locally only (no server call) - for dragging/resizing
   const updateElementLocal = useCallback((elementId: string, updates: UpdateElementInput) => {
-    const pageId = findElementPageId(elementId)
-    if (!pageId) return
-    dispatch({ type: "UPDATE_ELEMENT", payload: { pageId, elementId, updates } })
-  }, [findElementPageId])
+    const zoneId = findElementZoneId(elementId)
+    if (!zoneId) return
+    dispatch({ type: "UPDATE_ELEMENT", payload: { zoneId, elementId, updates } })
+  }, [findElementZoneId])
 
   // Update element position and save to server
   const updateElementPosition = useCallback(async (elementId: string, updates: UpdateElementInput) => {
-    const pageId = findElementPageId(elementId)
-    if (!pageId) return
-    dispatch({ type: "UPDATE_ELEMENT", payload: { pageId, elementId, updates } })
+    const zoneId = findElementZoneId(elementId)
+    if (!zoneId) return
+    dispatch({ type: "UPDATE_ELEMENT", payload: { zoneId, elementId, updates } })
     try {
       await updateElement(elementId, updates)
     } catch (error) {
       console.error("Update element error:", error)
       dispatch({ type: "SET_ERROR", payload: "Failed to update photo" })
     }
-  }, [findElementPageId])
+  }, [findElementZoneId])
 
   // Delete element
   const deleteElementFromCanvas = useCallback(async (elementId: string) => {
-    const pageId = findElementPageId(elementId)
-    if (!pageId) return
+    const zoneId = findElementZoneId(elementId)
+    if (!zoneId) return
     try {
       await deleteElement(elementId)
-      dispatch({ type: "DELETE_ELEMENT", payload: { pageId, elementId } })
+      dispatch({ type: "DELETE_ELEMENT", payload: { zoneId, elementId } })
     } catch (error) {
       console.error("Delete element error:", error)
       dispatch({ type: "SET_ERROR", payload: "Failed to delete photo" })
     }
-  }, [findElementPageId])
+  }, [findElementZoneId])
 
   // Select element (and navigate to its page)
   const selectElement = useCallback((elementId: string | null) => {
     // If selecting an element, navigate to its page first
     if (elementId) {
-      const pageId = findElementPageId(elementId)
-      if (pageId) {
-        const pageIndex = state.pages.findIndex(p => p.id === pageId)
-        if (pageIndex !== -1) {
-          const spreadIndex = Math.floor(pageIndex / 2)
-          const pageSide = pageIndex % 2 === 0 ? 'left' : 'right'
+      const zoneId = findElementZoneId(elementId)
+      if (zoneId) {
+        const pageId = findPageIdForZone(zoneId)
+        if (pageId) {
+          const pageIndex = state.pages.findIndex(p => p.id === pageId)
+          if (pageIndex !== -1) {
+            const spreadIndex = Math.floor(pageIndex / 2)
+            const pageSide = pageIndex % 2 === 0 ? 'left' : 'right'
 
-          // Set spread and side before selecting (SET_CURRENT_SPREAD clears selection)
-          if (spreadIndex !== state.currentSpreadIndex) {
-            dispatch({ type: "SET_CURRENT_SPREAD", payload: spreadIndex })
-          }
-          if (pageSide !== state.activePageSide) {
-            dispatch({ type: "SET_ACTIVE_PAGE_SIDE", payload: pageSide })
+            // Set spread and side before selecting (SET_CURRENT_SPREAD clears selection)
+            if (spreadIndex !== state.currentSpreadIndex) {
+              dispatch({ type: "SET_CURRENT_SPREAD", payload: spreadIndex })
+            }
+            if (pageSide !== state.activePageSide) {
+              dispatch({ type: "SET_ACTIVE_PAGE_SIDE", payload: pageSide })
+            }
           }
         }
       }
@@ -421,7 +443,7 @@ export function EditorProvider({
 
     // Select the element after navigation
     dispatch({ type: "SELECT_ELEMENT", payload: elementId })
-  }, [findElementPageId, state.pages, state.currentSpreadIndex, state.activePageSide])
+  }, [findElementZoneId, findPageIdForZone, state.pages, state.currentSpreadIndex, state.activePageSide])
 
   // Set dragging state (for thumbnail optimization)
   const setDragging = useCallback((isDragging: boolean) => {
