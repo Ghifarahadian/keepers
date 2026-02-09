@@ -86,6 +86,7 @@ DROP TABLE IF EXISTS public.profiles CASCADE;
 
 -- Drop all functions
 DROP FUNCTION IF EXISTS public.handle_updated_at() CASCADE;
+DROP FUNCTION IF EXISTS public.is_admin() CASCADE;
 DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
 DROP FUNCTION IF EXISTS public.sync_user_email() CASCADE;
 DROP FUNCTION IF EXISTS public.delete_user_account() CASCADE;

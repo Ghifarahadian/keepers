@@ -17,6 +17,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Helper function to check if current user is admin
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
 -- ============================================
 -- SECTION 2: PROFILES TABLE
 -- ============================================
@@ -43,12 +54,12 @@ CREATE INDEX IF NOT EXISTS idx_profiles_is_admin ON public.profiles(is_admin) WH
 DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 CREATE POLICY "Users can view own profile"
   ON public.profiles FOR SELECT
-  USING (auth.uid() = id);
+  USING (auth.uid() = id OR is_admin());
 
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile"
   ON public.profiles FOR UPDATE
-  USING (auth.uid() = id);
+  USING (auth.uid() = id OR is_admin());
 
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 CREATE POLICY "Users can insert own profile"
@@ -207,25 +218,25 @@ DROP POLICY IF EXISTS "Users can view own projects" ON public.projects;
 CREATE POLICY "Users can view own projects"
   ON public.projects FOR SELECT
   TO authenticated
-  USING (user_id = auth.uid());
+  USING (user_id = auth.uid() OR is_admin());
 
 DROP POLICY IF EXISTS "Users can insert own projects" ON public.projects;
 CREATE POLICY "Users can insert own projects"
   ON public.projects FOR INSERT
   TO authenticated
-  WITH CHECK (user_id = auth.uid());
+  WITH CHECK (user_id = auth.uid() OR is_admin());
 
 DROP POLICY IF EXISTS "Users can update own projects" ON public.projects;
 CREATE POLICY "Users can update own projects"
   ON public.projects FOR UPDATE
   TO authenticated
-  USING (user_id = auth.uid());
+  USING (user_id = auth.uid() OR is_admin());
 
 DROP POLICY IF EXISTS "Users can delete own projects" ON public.projects;
 CREATE POLICY "Users can delete own projects"
   ON public.projects FOR DELETE
   TO authenticated
-  USING (user_id = auth.uid());
+  USING (user_id = auth.uid() OR is_admin());
 
 DROP TRIGGER IF EXISTS on_project_updated ON public.projects;
 CREATE TRIGGER on_project_updated
@@ -304,41 +315,53 @@ DROP POLICY IF EXISTS "Users can view own pages" ON public.pages;
 CREATE POLICY "Users can view own pages"
   ON public.pages FOR SELECT
   TO authenticated
-  USING (EXISTS (
-    SELECT 1 FROM public.projects
-    WHERE projects.id = pages.project_id
-    AND projects.user_id = auth.uid()
-  ));
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.projects
+      WHERE projects.id = pages.project_id
+      AND projects.user_id = auth.uid()
+    )
+    OR is_admin()
+  );
 
 DROP POLICY IF EXISTS "Users can create own pages" ON public.pages;
 CREATE POLICY "Users can create own pages"
   ON public.pages FOR INSERT
   TO authenticated
-  WITH CHECK (EXISTS (
-    SELECT 1 FROM public.projects
-    WHERE projects.id = pages.project_id
-    AND projects.user_id = auth.uid()
-  ));
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.projects
+      WHERE projects.id = pages.project_id
+      AND projects.user_id = auth.uid()
+    )
+    OR is_admin()
+  );
 
 DROP POLICY IF EXISTS "Users can update own pages" ON public.pages;
 CREATE POLICY "Users can update own pages"
   ON public.pages FOR UPDATE
   TO authenticated
-  USING (EXISTS (
-    SELECT 1 FROM public.projects
-    WHERE projects.id = pages.project_id
-    AND projects.user_id = auth.uid()
-  ));
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.projects
+      WHERE projects.id = pages.project_id
+      AND projects.user_id = auth.uid()
+    )
+    OR is_admin()
+  );
 
 DROP POLICY IF EXISTS "Users can delete own pages" ON public.pages;
 CREATE POLICY "Users can delete own pages"
   ON public.pages FOR DELETE
   TO authenticated
-  USING (EXISTS (
-    SELECT 1 FROM public.projects
-    WHERE projects.id = pages.project_id
-    AND projects.user_id = auth.uid()
-  ));
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.projects
+      WHERE projects.id = pages.project_id
+      AND projects.user_id = auth.uid()
+    )
+    OR is_admin()
+  );
 
 DROP TRIGGER IF EXISTS on_page_updated ON public.pages;
 CREATE TRIGGER on_page_updated
@@ -441,11 +464,14 @@ CREATE POLICY "Anyone can view layout zones"
       SELECT 1 FROM public.layouts
       WHERE layouts.id = zones.layout_id AND layouts.is_active = TRUE
     )) OR
-    (page_id IS NOT NULL AND EXISTS (
-      SELECT 1 FROM public.pages
-      JOIN public.projects ON projects.id = pages.project_id
-      WHERE pages.id = zones.page_id
-      AND projects.user_id = auth.uid()
+    (page_id IS NOT NULL AND (
+      EXISTS (
+        SELECT 1 FROM public.pages
+        JOIN public.projects ON projects.id = pages.project_id
+        WHERE pages.id = zones.page_id
+        AND projects.user_id = auth.uid()
+      )
+      OR is_admin()
     ))
   );
 
@@ -453,15 +479,15 @@ DROP POLICY IF EXISTS "Admins can manage layout zones" ON public.zones;
 CREATE POLICY "Admins can manage layout zones"
   ON public.zones FOR ALL
   USING (
-    (layout_id IS NOT NULL AND EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE profiles.id = auth.uid() AND profiles.is_admin = TRUE
-    )) OR
-    (page_id IS NOT NULL AND EXISTS (
-      SELECT 1 FROM public.pages
-      JOIN public.projects ON projects.id = pages.project_id
-      WHERE pages.id = zones.page_id
-      AND projects.user_id = auth.uid()
+    (layout_id IS NOT NULL AND is_admin()) OR
+    (page_id IS NOT NULL AND (
+      EXISTS (
+        SELECT 1 FROM public.pages
+        JOIN public.projects ON projects.id = pages.project_id
+        WHERE pages.id = zones.page_id
+        AND projects.user_id = auth.uid()
+      )
+      OR is_admin()
     ))
   );
 
@@ -505,46 +531,58 @@ CREATE INDEX IF NOT EXISTS idx_elements_zone_id ON public.elements(zone_id);
 DROP POLICY IF EXISTS "Users can view own elements" ON public.elements;
 CREATE POLICY "Users can view own elements"
   ON public.elements FOR SELECT
-  USING (EXISTS (
-    SELECT 1 FROM public.zones
-    JOIN public.pages ON pages.id = zones.page_id
-    JOIN public.projects ON projects.id = pages.project_id
-    WHERE zones.id = elements.zone_id
-    AND projects.user_id = auth.uid()
-  ));
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.zones
+      JOIN public.pages ON pages.id = zones.page_id
+      JOIN public.projects ON projects.id = pages.project_id
+      WHERE zones.id = elements.zone_id
+      AND projects.user_id = auth.uid()
+    )
+    OR is_admin()
+  );
 
 DROP POLICY IF EXISTS "Users can insert own elements" ON public.elements;
 CREATE POLICY "Users can insert own elements"
   ON public.elements FOR INSERT
-  WITH CHECK (EXISTS (
-    SELECT 1 FROM public.zones
-    JOIN public.pages ON pages.id = zones.page_id
-    JOIN public.projects ON projects.id = pages.project_id
-    WHERE zones.id = elements.zone_id
-    AND projects.user_id = auth.uid()
-  ));
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.zones
+      JOIN public.pages ON pages.id = zones.page_id
+      JOIN public.projects ON projects.id = pages.project_id
+      WHERE zones.id = elements.zone_id
+      AND projects.user_id = auth.uid()
+    )
+    OR is_admin()
+  );
 
 DROP POLICY IF EXISTS "Users can update own elements" ON public.elements;
 CREATE POLICY "Users can update own elements"
   ON public.elements FOR UPDATE
-  USING (EXISTS (
-    SELECT 1 FROM public.zones
-    JOIN public.pages ON pages.id = zones.page_id
-    JOIN public.projects ON projects.id = pages.project_id
-    WHERE zones.id = elements.zone_id
-    AND projects.user_id = auth.uid()
-  ));
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.zones
+      JOIN public.pages ON pages.id = zones.page_id
+      JOIN public.projects ON projects.id = pages.project_id
+      WHERE zones.id = elements.zone_id
+      AND projects.user_id = auth.uid()
+    )
+    OR is_admin()
+  );
 
 DROP POLICY IF EXISTS "Users can delete own elements" ON public.elements;
 CREATE POLICY "Users can delete own elements"
   ON public.elements FOR DELETE
-  USING (EXISTS (
-    SELECT 1 FROM public.zones
-    JOIN public.pages ON pages.id = zones.page_id
-    JOIN public.projects ON projects.id = pages.project_id
-    WHERE zones.id = elements.zone_id
-    AND projects.user_id = auth.uid()
-  ));
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.zones
+      JOIN public.pages ON pages.id = zones.page_id
+      JOIN public.projects ON projects.id = pages.project_id
+      WHERE zones.id = elements.zone_id
+      AND projects.user_id = auth.uid()
+    )
+    OR is_admin()
+  );
 
 DROP TRIGGER IF EXISTS on_element_updated ON public.elements;
 CREATE TRIGGER on_element_updated
@@ -631,7 +669,7 @@ CREATE POLICY "Users can upload own photos"
 ON storage.objects FOR INSERT
 WITH CHECK (
   bucket_id = 'project-photos'
-  AND (auth.uid())::text = (storage.foldername(name))[1]
+  AND ((auth.uid())::text = (storage.foldername(name))[1] OR is_admin())
 );
 
 DROP POLICY IF EXISTS "Users can view own photos" ON storage.objects;
@@ -639,7 +677,7 @@ CREATE POLICY "Users can view own photos"
 ON storage.objects FOR SELECT
 USING (
   bucket_id = 'project-photos'
-  AND (auth.uid())::text = (storage.foldername(name))[1]
+  AND ((auth.uid())::text = (storage.foldername(name))[1] OR is_admin())
 );
 
 DROP POLICY IF EXISTS "Users can update own photos" ON storage.objects;
@@ -647,7 +685,7 @@ CREATE POLICY "Users can update own photos"
 ON storage.objects FOR UPDATE
 USING (
   bucket_id = 'project-photos'
-  AND (auth.uid())::text = (storage.foldername(name))[1]
+  AND ((auth.uid())::text = (storage.foldername(name))[1] OR is_admin())
 );
 
 DROP POLICY IF EXISTS "Users can delete own photos" ON storage.objects;
@@ -655,7 +693,7 @@ CREATE POLICY "Users can delete own photos"
 ON storage.objects FOR DELETE
 USING (
   bucket_id = 'project-photos'
-  AND (auth.uid())::text = (storage.foldername(name))[1]
+  AND ((auth.uid())::text = (storage.foldername(name))[1] OR is_admin())
 );
 
 DROP POLICY IF EXISTS "Anyone can view template assets" ON storage.objects;
