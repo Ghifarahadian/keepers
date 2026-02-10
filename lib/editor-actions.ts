@@ -17,6 +17,7 @@ import type {
   UpdateElementInput,
 } from "@/types/editor"
 import { applyVoucherToProject, revertVoucher } from "@/lib/voucher-actions"
+import { createZone as createZoneUtil, updateZone as updateZoneUtil } from "@/lib/zone-operations"
 
 // ============================================
 // PROJECT ACTIONS
@@ -40,7 +41,6 @@ export async function createProject(
     .insert({
       user_id: user.id,
       title: input?.title || "Untitled Project",
-      template_id: input?.template_id || null,
       page_count: input?.page_count || 30,
       paper_size: input?.paper_size || 'A4',
       voucher_code: input?.voucher_code || null,
@@ -121,7 +121,7 @@ export async function getProject(projectId: string): Promise<Project | null> {
       *,
       pages (
         *,
-        zones (*)
+        zones!zones_page_id_fkey (*)
       )
     `
     )
@@ -405,50 +405,8 @@ export async function createZone(input: CreateZoneInput): Promise<PageZone> {
     throw new Error("Unauthorized")
   }
 
-  // Determine which table to use based on input
-  const isLayoutZone = input.layout_id !== undefined && input.layout_id !== null
-  const isPageZone = input.page_id !== undefined && input.page_id !== null
-
-  if (!isLayoutZone && !isPageZone) {
-    throw new Error("Either page_id or layout_id must be provided")
-  }
-
-  if (isLayoutZone) {
-    // Create layout zone
-    const { data: zone, error } = await supabase
-      .from("layout_zones")
-      .insert({
-        layout_id: input.layout_id,
-        zone_index: input.zone_index,
-        zone_type: input.zone_type || 'photo',
-        position_x: input.position_x,
-        position_y: input.position_y,
-        width: input.width,
-        height: input.height,
-      })
-      .select()
-      .single()
-
-    if (error) throw error
-    return zone as PageZone
-  } else {
-    // Create page zone
-    const { data: zone, error } = await supabase
-      .from("page_zones")
-      .insert({
-        page_id: input.page_id,
-        zone_index: input.zone_index,
-        position_x: input.position_x,
-        position_y: input.position_y,
-        width: input.width,
-        height: input.height,
-      })
-      .select()
-      .single()
-
-    if (error) throw error
-    return zone as PageZone
-  }
+  // Delegate to shared utility (handles validation)
+  return createZoneUtil(input) as Promise<PageZone>
 }
 
 export async function updateZone(
@@ -464,13 +422,8 @@ export async function updateZone(
     throw new Error("Unauthorized")
   }
 
-  // Update page zone (editor-facing zones)
-  const { error } = await supabase
-    .from("page_zones")
-    .update(updates)
-    .eq("id", zoneId)
-
-  if (error) throw error
+  // Delegate to shared utility (handles validation)
+  await updateZoneUtil(zoneId, updates)
 }
 
 export async function deleteZone(zoneId: string): Promise<void> {
@@ -483,8 +436,8 @@ export async function deleteZone(zoneId: string): Promise<void> {
     throw new Error("Unauthorized")
   }
 
-  // Delete page zone (editor-facing zones)
-  const { error } = await supabase.from("page_zones").delete().eq("id", zoneId)
+  // Delete zone from unified zones table
+  const { error } = await supabase.from("zones").delete().eq("id", zoneId)
 
   if (error) throw error
 }

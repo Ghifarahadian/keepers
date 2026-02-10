@@ -302,6 +302,7 @@ CREATE TABLE IF NOT EXISTS public.pages (
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   page_number INT NOT NULL,
   title VARCHAR(255),
+  layout_slug VARCHAR(100), -- Reference to layout used (informational only, no FK)
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(project_id, page_number)
@@ -310,6 +311,7 @@ CREATE TABLE IF NOT EXISTS public.pages (
 ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
 
 CREATE INDEX IF NOT EXISTS idx_pages_project_id ON public.pages(project_id, page_number);
+CREATE INDEX IF NOT EXISTS idx_pages_layout_slug ON public.pages(layout_slug) WHERE layout_slug IS NOT NULL;
 
 DROP POLICY IF EXISTS "Users can view own pages" ON public.pages;
 CREATE POLICY "Users can view own pages"

@@ -64,6 +64,7 @@ export interface Template {
   is_active: boolean
   created_at: string
   updated_at: string
+  pages?: Page[] // Optional: pages from template project (mapped from template_project.pages)
 }
 
 // ============================================

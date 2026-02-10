@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef } from "react"
 import { useEditor } from "@/lib/contexts/editor-context"
 import { ZoneContainer } from "./elements/zone-container"
 import { useDroppable } from "@dnd-kit/core"
@@ -8,6 +9,7 @@ import type { Page } from "@/types/editor"
 // Individual page component within the spread
 function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' }) {
   const { state, selectElement, selectZone, setActivePageSide } = useEditor()
+  const canvasRef = useRef<HTMLDivElement>(null)
   const { setNodeRef } = useDroppable({
     id: page ? `canvas-${side}` : `canvas-${side}-empty`,
     data: { pageId: page?.id, side }
@@ -24,7 +26,10 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => {
+        canvasRef.current = node
+        setNodeRef(node)
+      }}
       data-canvas
       data-page-id={page?.id}
       data-side={side}
@@ -48,6 +53,7 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
               zone={zone}
               pageId={page.id}
               elements={zoneElements}
+              canvasRef={canvasRef}
             />
           )
         })

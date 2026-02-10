@@ -4,7 +4,10 @@
       "Bash(pnpm add:*)",
       "Bash(cat:*)",
       "Bash(xargs cat:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npx supabase:*)",
+      "Bash(pnpm build:*)"
     ]
   }
 }

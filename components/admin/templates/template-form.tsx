@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { createTemplate, updateTemplate, getAdminCategories, getAdminLayouts } from "@/lib/admin-actions"
+import { createTemplate, updateTemplate, updateTemplatePage, getAdminCategories, getAdminLayouts } from "@/lib/admin-actions"
 import type { Project } from "@/types/editor"
 import type { TemplateCategory, LayoutDB } from "@/types/template"
 import { PageBuilder } from "./page-builder"
@@ -18,6 +18,7 @@ interface PageInput {
   page_number: number
   layout_slug: string
   title?: string
+  id?: string // Page ID for edit mode
 }
 
 export function TemplateForm({ template, isEdit }: TemplateFormProps) {
@@ -34,17 +35,11 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
   const [thumbnailUrl, setThumbnailUrl] = useState(template?.thumbnail_url || "")
   const [isFeatured, setIsFeatured] = useState(template?.is_featured ?? false)
   const [isActive, setIsActive] = useState(template?.is_active ?? true)
-  const [pages, setPages] = useState<PageInput[]>(
-    template?.pages?.map((p) => ({
-      page_number: p.page_number,
-      layout_slug: "blank", // Default to blank since we can't determine layout from zones
-      title: p.title || undefined,
-    })) || [
-      { page_number: 1, layout_slug: "blank" },
-      { page_number: 2, layout_slug: "blank" },
-    ]
-  )
+  const [pageCount, setPageCount] = useState<30 | 40>(template?.page_count || 30)
+  const [pages, setPages] = useState<PageInput[]>([])
+  const [changedPageLayouts, setChangedPageLayouts] = useState<Map<string, string>>(new Map())
 
+  // Load categories and layouts
   useEffect(() => {
     async function loadData() {
       const [cats, lays] = await Promise.all([
@@ -57,6 +52,60 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
     loadData()
   }, [])
 
+  // Initialize pages when layouts load
+  useEffect(() => {
+    if (layouts.length > 0 && pages.length === 0) {
+      if (!isEdit) {
+        // New template: Generate pages based on page count with default layout
+        const defaultLayout = layouts.find((l) => l.is_active) || layouts[0]
+        const defaultSlug = defaultLayout?.slug || "blank"
+
+        const initialPages: PageInput[] = []
+        for (let i = 1; i <= pageCount; i++) {
+          initialPages.push({
+            page_number: i,
+            layout_slug: defaultSlug,
+          })
+        }
+        setPages(initialPages)
+      } else if (template?.pages) {
+        // Edit mode: Read layout_slug directly from pages
+        const initialPages = template.pages.map((p) => ({
+          page_number: p.page_number,
+          layout_slug: p.layout_slug || "blank", // Use stored layout_slug or default to blank
+          title: p.title || undefined,
+          id: p.id,
+        }))
+
+        setPages(initialPages)
+      }
+    }
+  }, [layouts, isEdit, pages.length, pageCount, template])
+
+  // Update pages when page count changes
+  const handlePageCountChange = (newCount: 30 | 40) => {
+    setPageCount(newCount)
+
+    // Get the current default layout for new pages
+    const defaultLayout = layouts.find((l) => l.is_active) || layouts[0]
+    const defaultSlug = defaultLayout?.slug || "blank"
+
+    if (newCount > pages.length) {
+      // Add more pages
+      const newPages = [...pages]
+      for (let i = pages.length + 1; i <= newCount; i++) {
+        newPages.push({
+          page_number: i,
+          layout_slug: defaultSlug,
+        })
+      }
+      setPages(newPages)
+    } else if (newCount < pages.length) {
+      // Remove extra pages
+      setPages(pages.slice(0, newCount))
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -64,6 +113,7 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
 
     try {
       if (isEdit && template) {
+        // Update template metadata
         await updateTemplate(template.id, {
           title,
           description: description || undefined,
@@ -72,6 +122,15 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
           is_featured: isFeatured,
           is_active: isActive,
         })
+
+        // Update layouts for changed pages
+        if (changedPageLayouts.size > 0) {
+          const updatePromises = Array.from(changedPageLayouts.entries()).map(
+            ([pageId, layoutSlug]) => updateTemplatePage(pageId, layoutSlug)
+          )
+          await Promise.all(updatePromises)
+        }
+
         router.push("/admin/templates")
         router.refresh()
       } else {
@@ -81,6 +140,8 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
           description: description || undefined,
           category_id: categoryId || undefined,
           thumbnail_url: thumbnailUrl || undefined,
+          page_count: pageCount,
+          paper_size: "A4",
           pages,
         })
         router.push("/admin/templates")
@@ -100,6 +161,24 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
     setSlug(generatedSlug)
+  }
+
+  // Handle page changes and track layout changes in edit mode
+  const handlePagesChange = (newPages: PageInput[]) => {
+    if (isEdit) {
+      // Track which pages had their layout changed
+      const newChangedLayouts = new Map(changedPageLayouts)
+
+      newPages.forEach((newPage, index) => {
+        const oldPage = pages[index]
+        if (oldPage && newPage.id && oldPage.layout_slug !== newPage.layout_slug) {
+          newChangedLayouts.set(newPage.id, newPage.layout_slug)
+        }
+      })
+
+      setChangedPageLayouts(newChangedLayouts)
+    }
+    setPages(newPages)
   }
 
   return (
@@ -278,6 +357,30 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
               </p>
             </div>
 
+            <div>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: "var(--color-neutral)" }}
+              >
+                Page Count *
+              </label>
+              <select
+                value={pageCount}
+                onChange={(e) => handlePageCountChange(Number(e.target.value) as 30 | 40)}
+                disabled={isEdit}
+                className="w-full px-4 py-2 rounded-lg border disabled:opacity-50"
+                style={{ borderColor: "var(--color-border)" }}
+              >
+                <option value={30}>30 pages</option>
+                <option value={40}>40 pages</option>
+              </select>
+              {isEdit && (
+                <p className="text-xs mt-1" style={{ color: "var(--color-secondary)" }}>
+                  Page count cannot be changed in edit mode
+                </p>
+              )}
+            </div>
+
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2">
                 <input
@@ -325,12 +428,14 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
           <PageBuilder
             pages={pages}
             layouts={layouts}
-            onChange={setPages}
-            disabled={isEdit}
+            onChange={handlePagesChange}
+            disabled={false}
+            allowManualPageManagement={!isEdit}
+            allowLayoutChange={true}
           />
           {isEdit && (
             <p className="text-sm mt-4" style={{ color: "var(--color-secondary)" }}>
-              Page editing is disabled in edit mode. To modify pages, delete and recreate the template.
+              You can change the layout for any page. Zones will be updated when you save. Page count cannot be changed.
             </p>
           )}
         </div>

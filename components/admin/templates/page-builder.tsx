@@ -3,11 +3,13 @@
 import { Plus, Trash2, GripVertical } from "lucide-react"
 import type { LayoutDB } from "@/types/template"
 import type { Zone } from "@/types/editor"
+import { ZonePreview } from "@/components/ui/zone-preview"
 
 interface PageInput {
   page_number: number
   layout_slug: string
   title?: string
+  id?: string // Page ID for edit mode
 }
 
 interface PageBuilderProps {
@@ -15,13 +17,21 @@ interface PageBuilderProps {
   layouts: LayoutDB[]
   onChange: (pages: PageInput[]) => void
   disabled?: boolean
+  allowManualPageManagement?: boolean
+  allowLayoutChange?: boolean
 }
 
-export function PageBuilder({ pages, layouts, onChange, disabled }: PageBuilderProps) {
+export function PageBuilder({ pages, layouts, onChange, disabled, allowManualPageManagement = true, allowLayoutChange = true }: PageBuilderProps) {
+  // Get default layout for new pages (first active layout or first layout)
+  const getDefaultLayoutSlug = () => {
+    const defaultLayout = layouts.find((l) => l.is_active) || layouts[0]
+    return defaultLayout?.slug || "blank"
+  }
+
   const addPage = () => {
     const newPage: PageInput = {
       page_number: pages.length + 1,
-      layout_slug: "blank",
+      layout_slug: getDefaultLayoutSlug(),
     }
     onChange([...pages, newPage])
   }
@@ -43,30 +53,7 @@ export function PageBuilder({ pages, layouts, onChange, disabled }: PageBuilderP
     const layout = layouts.find((l) => l.slug === layoutSlug)
     if (!layout || !layout.zones) return null
 
-    return (
-      <div
-        className="w-12 h-16 border rounded relative overflow-hidden flex-shrink-0"
-        style={{
-          backgroundColor: "var(--color-white)",
-          borderColor: "var(--color-border)",
-        }}
-      >
-        {layout.zones.map((zone: Zone, idx: number) => (
-          <div
-            key={idx}
-            className="absolute"
-            style={{
-              left: `${zone.position_x}%`,
-              top: `${zone.position_y}%`,
-              width: `${zone.width}%`,
-              height: `${zone.height}%`,
-              backgroundColor: zone.zone_type === "text" ? "var(--color-accent)" : "var(--color-secondary)",
-              opacity: 0.6,
-            }}
-          />
-        ))}
-      </div>
-    )
+    return <ZonePreview zones={layout.zones as Zone[]} mode="display" />
   }
 
   return (
@@ -105,7 +92,7 @@ export function PageBuilder({ pages, layouts, onChange, disabled }: PageBuilderP
             <select
               value={page.layout_slug}
               onChange={(e) => updatePage(index, "layout_slug", e.target.value)}
-              disabled={disabled}
+              disabled={disabled || !allowLayoutChange}
               className="flex-1 px-3 py-2 rounded-lg border text-sm disabled:opacity-50"
               style={{ borderColor: "var(--color-border)" }}
             >
@@ -128,7 +115,7 @@ export function PageBuilder({ pages, layouts, onChange, disabled }: PageBuilderP
             />
 
             {/* Remove button */}
-            {!disabled && pages.length > 2 && (
+            {!disabled && allowManualPageManagement && pages.length > 2 && (
               <button
                 type="button"
                 onClick={() => removePage(index)}
@@ -143,7 +130,7 @@ export function PageBuilder({ pages, layouts, onChange, disabled }: PageBuilderP
       </div>
 
       {/* Add Page Button */}
-      {!disabled && (
+      {!disabled && allowManualPageManagement && (
         <button
           type="button"
           onClick={addPage}
@@ -163,8 +150,11 @@ export function PageBuilder({ pages, layouts, onChange, disabled }: PageBuilderP
           color: "var(--color-secondary)",
         }}
       >
-        <strong>Note:</strong> Templates must have at least 2 pages (for the spread view).
-        Each page can have a different layout.
+        <strong>Total Pages: {pages.length}</strong>
+        <br />
+        <strong>Note:</strong> {allowManualPageManagement
+          ? "Each page can have a different layout. Zones from the selected layout will be copied to the page when the template is created."
+          : "Page count is controlled by the 'Page Count' setting above. Each page can have a different layout, and zones from the selected layout will be copied to the page when the template is created."}
       </div>
     </div>
   )

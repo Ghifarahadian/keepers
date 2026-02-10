@@ -282,6 +282,7 @@ CREATE TABLE public.pages (
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   page_number INT NOT NULL,
   title VARCHAR(255),
+  layout_slug VARCHAR(100), -- Reference to layout used (informational only, no FK)
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(project_id, page_number)
@@ -291,11 +292,13 @@ CREATE TABLE public.pages (
 **Relationships:**
 - **N:1** with `projects` (many pages belong to one project)
 - **1:N** with `zones` (a page has many zones)
+- **Informational reference** to `layouts` via `layout_slug` (no FK constraint)
 
 **Key Points:**
 - Pages ONLY belong to projects (no template relationship)
 - Pages are created in pairs (spreads: left + right)
 - Page numbers are unique within a project
+- `layout_slug` stores which layout was used for reference (no FK - keeps pages/layouts decoupled)
 - Users can only access pages from their own projects (RLS enforced)
 
 ---

@@ -46,6 +46,7 @@ export interface Page {
   project_id: string // Pages always belong to a project
   page_number: number
   title?: string | null
+  layout_slug?: string | null // Reference to layout used (informational only, no FK)
   created_at: string
   updated_at: string
   zones?: Zone[]
@@ -191,10 +192,12 @@ export interface CreatePageInput {
   project_id: string // Pages always belong to a project
   page_number: number
   title?: string
+  layout_slug?: string // Optional: which layout was used
 }
 
 export interface UpdatePageInput {
   title?: string
+  layout_slug?: string // Optional: update which layout is being used
 }
 
 export interface CreateZoneInput {
