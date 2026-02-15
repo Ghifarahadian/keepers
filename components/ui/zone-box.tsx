@@ -4,8 +4,6 @@ import { useCallback } from "react"
 import { useDroppable } from "@dnd-kit/core"
 import { Image, Type } from "lucide-react"
 import { useZoneInteraction } from "@/lib/hooks/use-zone-interaction"
-import { PictureContainer } from "@/components/editor/elements/picture-container"
-import { TextContainer } from "@/components/editor/elements/text-container"
 import type { PageZone, Element } from "@/types/editor"
 
 type ZoneType = "photo" | "text"
@@ -233,13 +231,37 @@ export function ZoneBox({
         </>
       )}
 
-      {/* Editor mode: Render elements */}
+      {/* Editor mode: Render element content inline */}
       {!isAdmin &&
         elements.map((element) => {
-          if (element.type === "photo") {
-            return <PictureContainer key={element.id} element={element} zoneId={zone.id!} />
-          } else if (element.type === "text") {
-            return <TextContainer key={element.id} element={element} zoneId={zone.id!} />
+          if (element.type === "photo" && element.photo_url) {
+            return (
+              <img
+                key={element.id}
+                src={element.photo_url}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+              />
+            )
+          }
+          if (element.type === "text") {
+            return (
+              <div
+                key={element.id}
+                className="absolute inset-0 flex items-center justify-center p-2 overflow-hidden pointer-events-none"
+                style={{
+                  fontFamily: element.font_family || undefined,
+                  fontSize: element.font_size ? `${element.font_size}px` : undefined,
+                  color: element.font_color || "inherit",
+                  fontWeight: element.font_weight || undefined,
+                  fontStyle: element.font_style || undefined,
+                  textAlign: element.text_align || undefined,
+                  textDecoration: element.text_decoration !== "none" ? element.text_decoration || undefined : undefined,
+                }}
+              >
+                {element.text_content}
+              </div>
+            )
           }
           return null
         })}

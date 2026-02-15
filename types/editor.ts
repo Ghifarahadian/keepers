@@ -136,6 +136,7 @@ export interface EditorState {
   uploadedPhotos: UploadedPhoto[]
   selectedElementId: string | null
   selectedZoneId: string | null // For selecting empty zones
+  zoneDrawingType: "photo" | "text" | null // null = not in drawing mode
   isSaving: boolean
   lastSaved: string | null
   error: string | null
@@ -153,6 +154,8 @@ export type EditorAction =
   | { type: 'DELETE_PAGE'; payload: string }
   | { type: 'REORDER_PAGES'; payload: Page[] }
   | { type: 'SET_ZONES'; payload: { pageId: string; zones: Zone[] } }
+  | { type: 'ADD_ZONE'; payload: { pageId: string; zone: PageZone } }
+  | { type: 'DELETE_ZONE'; payload: { pageId: string; zoneId: string } }
   | { type: 'UPDATE_ZONE'; payload: { pageId: string; zoneId: string; updates: Partial<Zone> } }
   | { type: 'SET_ELEMENTS'; payload: { zoneId: string; elements: Element[] } }
   | { type: 'ADD_ELEMENT'; payload: { zoneId: string; element: Element } }
@@ -167,6 +170,7 @@ export type EditorAction =
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'SET_DRAGGING'; payload: boolean }
   | { type: 'SET_DRAGGING_ZONE'; payload: boolean }
+  | { type: 'SET_ZONE_DRAWING_TYPE'; payload: "photo" | "text" | null }
 
 // ============================================
 // FORM TYPES

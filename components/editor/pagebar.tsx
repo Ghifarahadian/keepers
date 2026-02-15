@@ -1,9 +1,8 @@
 "use client"
 
 import React, { memo, useMemo } from "react"
-import { useEditor } from "@/lib/contexts/editor-context"
-import { Plus } from "lucide-react"
-import { createPage, deletePage } from "@/lib/editor-actions"
+import { useEditor, getItemPages } from "@/lib/contexts/editor-context"
+import { deletePage } from "@/lib/editor-actions"
 import type { Page, Element } from "@/types/editor"
 
 interface PageThumbnailProps {
@@ -63,7 +62,6 @@ const PageThumbnail = memo(function PageThumbnail({
               )
             })()}
             {element.type === 'text' && element.text_content && (() => {
-              // Scale font size relative to canvas (thumbnail is ~1/8 of canvas width for spread)
               const baseFontSize = element.font_size || 16
               const scaledFontSize = Math.max(2, baseFontSize * 0.15)
               return (
@@ -90,11 +88,7 @@ const PageThumbnail = memo(function PageThumbnail({
     </div>
   )
 }, (prevProps, nextProps) => {
-  // Skip re-render if currently dragging
-  if (nextProps.isDragging) {
-    return true // Props are "equal" - don't re-render
-  }
-  // Otherwise, do shallow comparison
+  if (nextProps.isDragging) return true
   return (
     prevProps.page?.id === nextProps.page?.id &&
     prevProps.elements === nextProps.elements &&
@@ -102,10 +96,14 @@ const PageThumbnail = memo(function PageThumbnail({
   )
 })
 
-interface Spread {
-  index: number
+type ItemType = 'cover-front' | 'cover-back' | 'spread'
+
+interface PageItem {
+  type: ItemType
+  itemIndex: number
   leftPage: Page | null
   rightPage: Page | null
+  label: string
 }
 
 export function EditorPagebar() {
@@ -123,69 +121,73 @@ export function EditorPagebar() {
     return allElements
   }, [state.zones, state.elements])
 
-  // Calculate spreads from pages
-  const spreads = useMemo((): Spread[] => {
-    const result: Spread[] = []
-    for (let i = 0; i < state.pages.length; i += 2) {
+  // Build the ordered list of page items (front cover, inner spreads, back cover)
+  const items = useMemo((): PageItem[] => {
+    const pages = state.pages
+    const result: PageItem[] = []
+
+    if (pages.length === 0) {
+      return [{ type: 'cover-front', itemIndex: 0, leftPage: null, rightPage: null, label: 'Front Cover' }]
+    }
+
+    // Front cover (item 0 – single page)
+    result.push({
+      type: 'cover-front',
+      itemIndex: 0,
+      leftPage: pages[0],
+      rightPage: null,
+      label: 'Front Cover',
+    })
+
+    // Inner spreads
+    const lastItemIndex = Math.floor(pages.length / 2)
+    for (let i = 1; i < lastItemIndex; i++) {
+      const [left, right] = getItemPages(i, pages)
+      const leftNum = i * 2       // 1-indexed page numbers shown in label
+      const rightNum = i * 2 + 1
       result.push({
-        index: Math.floor(i / 2),
-        leftPage: state.pages[i] || null,
-        rightPage: state.pages[i + 1] || null,
+        type: 'spread',
+        itemIndex: i,
+        leftPage: left,
+        rightPage: right,
+        label: `Pages ${leftNum}–${rightNum}`,
       })
     }
-    // If no pages, show one empty spread
-    if (result.length === 0) {
-      result.push({ index: 0, leftPage: null, rightPage: null })
+
+    // Back cover (last item – single page)
+    if (pages.length >= 2) {
+      result.push({
+        type: 'cover-back',
+        itemIndex: lastItemIndex,
+        leftPage: null,
+        rightPage: pages[pages.length - 1],
+        label: 'Back Cover',
+      })
     }
+
     return result
   }, [state.pages])
 
-  // Add pages in pairs
-  const handleAddSpread = async () => {
-    try {
-      const nextPageNumber = state.pages.length + 1
+  // Delete an inner spread (both pages)
+  const handleDeleteItem = async (item: PageItem) => {
+    if (item.type !== 'spread') return
 
-      // Create two pages at once (start blank, zones added later)
-      const page1 = await createPage({
-        project_id: state.project.id,
-        page_number: nextPageNumber,
-      })
-      const page2 = await createPage({
-        project_id: state.project.id,
-        page_number: nextPageNumber + 1,
-      })
-
-      dispatch({ type: "ADD_PAGE", payload: page1 })
-      dispatch({ type: "ADD_PAGE", payload: page2 })
-
-      // Navigate to the new spread
-      const newSpreadIndex = Math.floor(state.pages.length / 2)
-      setCurrentSpread(newSpreadIndex)
-    } catch (error) {
-      console.error("Failed to add spread:", error)
-    }
-  }
-
-  // Delete entire spread (both pages)
-  const handleDeleteSpread = async (spread: Spread) => {
-    if (spreads.length <= 1) {
-      alert("You must have at least one spread")
+    const innerSpreads = items.filter(i => i.type === 'spread')
+    if (innerSpreads.length <= 1) {
+      alert("You must have at least one inner spread")
       return
     }
 
-    if (!confirm("Are you sure you want to delete this spread (both pages)?")) {
-      return
-    }
+    if (!confirm("Are you sure you want to delete this spread (both pages)?")) return
 
     try {
-      // Delete both pages in the spread
-      if (spread.leftPage) {
-        await deletePage(spread.leftPage.id, state.project.id)
-        dispatch({ type: "DELETE_PAGE", payload: spread.leftPage.id })
+      if (item.leftPage) {
+        await deletePage(item.leftPage.id, state.project.id)
+        dispatch({ type: "DELETE_PAGE", payload: item.leftPage.id })
       }
-      if (spread.rightPage) {
-        await deletePage(spread.rightPage.id, state.project.id)
-        dispatch({ type: "DELETE_PAGE", payload: spread.rightPage.id })
+      if (item.rightPage) {
+        await deletePage(item.rightPage.id, state.project.id)
+        dispatch({ type: "DELETE_PAGE", payload: item.rightPage.id })
       }
     } catch (error) {
       console.error("Failed to delete spread:", error)
@@ -195,80 +197,84 @@ export function EditorPagebar() {
   return (
     <aside className="fixed left-0 top-16 bottom-14 w-60 border-r overflow-y-auto" style={{ backgroundColor: 'var(--color-white)', borderColor: 'var(--color-border)' }}>
       <div className="p-4 space-y-3">
-        {/* Spread List */}
-        {spreads.map((spread) => (
-          <div
-            key={`spread-${spread.index}`}
-            className={`relative group cursor-pointer rounded-lg border-2 transition-all ${
-              state.currentSpreadIndex === spread.index
-                ? "border-[var(--color-accent)] shadow-md"
-                : "hover:shadow-sm"
-            }`}
-            style={{
-              backgroundColor: 'var(--color-white)',
-              borderColor: state.currentSpreadIndex === spread.index ? 'var(--color-accent)' : 'var(--color-border)'
-            }}
-            onClick={() => setCurrentSpread(spread.index)}
-          >
-            {/* Spread Thumbnail - Two pages side by side */}
-            <div className="flex gap-0.5 p-1" style={{ backgroundColor: 'var(--color-primary-bg-light)' }}>
-              {/* Left page thumbnail */}
-              <PageThumbnail
-                page={spread.leftPage}
-                elements={getPageElements(spread.leftPage)}
-                uploadedPhotos={state.uploadedPhotos}
-                isDragging={state.isDragging}
-              />
-              {/* Right page thumbnail */}
-              <PageThumbnail
-                page={spread.rightPage}
-                elements={getPageElements(spread.rightPage)}
-                uploadedPhotos={state.uploadedPhotos}
-                isDragging={state.isDragging}
-              />
+        {items.map((item) => {
+          const isCover = item.type === 'cover-front' || item.type === 'cover-back'
+          const coverPage = isCover ? (item.leftPage ?? item.rightPage) : null
+          const innerSpreads = items.filter(i => i.type === 'spread')
+          const canDelete = item.type === 'spread' && innerSpreads.length > 1
 
-              {/* Delete button (only show if more than 1 spread) */}
-              {spreads.length > 1 && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleDeleteSpread(spread)
-                  }}
-                  className="absolute top-1 right-1 w-5 h-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
-                  style={{
-                    backgroundColor: 'var(--color-error)',
-                    color: 'var(--color-white)'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-error-hover)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-error)'}
-                >
-                  ×
-                </button>
+          return (
+            <div
+              key={`item-${item.itemIndex}`}
+              className={`relative group cursor-pointer rounded-lg border-2 transition-all ${
+                state.currentSpreadIndex === item.itemIndex
+                  ? "border-[var(--color-accent)] shadow-md"
+                  : "hover:shadow-sm"
+              }`}
+              style={{
+                backgroundColor: 'var(--color-white)',
+                borderColor: state.currentSpreadIndex === item.itemIndex ? 'var(--color-accent)' : 'var(--color-border)'
+              }}
+              onClick={() => setCurrentSpread(item.itemIndex)}
+            >
+              {isCover ? (
+                /* Cover thumbnail – single page, centered */
+                <div className="flex justify-center p-1" style={{ backgroundColor: 'var(--color-primary-bg-light)' }}>
+                  <div style={{ width: '50%' }}>
+                    <PageThumbnail
+                      page={coverPage}
+                      elements={getPageElements(coverPage)}
+                      uploadedPhotos={state.uploadedPhotos}
+                      isDragging={state.isDragging}
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Spread thumbnail – two pages side by side */
+                <div className="flex gap-0.5 p-1" style={{ backgroundColor: 'var(--color-primary-bg-light)' }}>
+                  <PageThumbnail
+                    page={item.leftPage}
+                    elements={getPageElements(item.leftPage)}
+                    uploadedPhotos={state.uploadedPhotos}
+                    isDragging={state.isDragging}
+                  />
+                  <PageThumbnail
+                    page={item.rightPage}
+                    elements={getPageElements(item.rightPage)}
+                    uploadedPhotos={state.uploadedPhotos}
+                    isDragging={state.isDragging}
+                  />
+
+                  {/* Delete button – inner spreads only */}
+                  {canDelete && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteItem(item)
+                      }}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
+                      style={{
+                        backgroundColor: 'var(--color-error)',
+                        color: 'var(--color-white)'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-error-hover)'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-error)'}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               )}
-            </div>
 
-            {/* Spread Label */}
-            <div className="p-1.5 text-center">
-              <span className="text-xs font-medium" style={{ color: 'var(--color-neutral)', fontFamily: 'var(--font-serif)' }}>
-                {spread.index === 0 ? 'Covers' : `Pages ${spread.index * 2}-${spread.index * 2 + 1}`}
-              </span>
+              {/* Item label */}
+              <div className="p-1.5 text-center">
+                <span className="text-xs font-medium" style={{ color: 'var(--color-neutral)', fontFamily: 'var(--font-serif)' }}>
+                  {item.label}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
-
-        {/* Add Spread Button */}
-        <button
-          onClick={handleAddSpread}
-          className="w-full rounded-lg border-2 border-dashed hover:border-[var(--color-accent)] transition-all flex flex-col items-center justify-center gap-1 py-4 hover:text-[var(--color-accent)]"
-          style={{
-            borderColor: 'var(--color-border)',
-            color: 'var(--color-neutral)',
-            fontFamily: 'var(--font-serif)'
-          }}
-        >
-          <Plus className="w-6 h-6" />
-          <span className="text-xs font-medium">Add Spread</span>
-        </button>
+          )
+        })}
       </div>
     </aside>
   )

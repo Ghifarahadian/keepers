@@ -9,7 +9,6 @@ import { EditorToolbar } from "./toolbar"
 import { EditorBottomBar } from "./bottom-bar"
 import type { Project, UploadedPhoto } from "@/types/editor"
 import { useState } from "react"
-import { Image, Type } from "lucide-react"
 import { updateElement } from "@/lib/editor-actions"
 
 interface EditorLayoutProps {
@@ -25,7 +24,6 @@ interface EditorLayoutProps {
 
 type DragItem =
   | { type: "photo"; photo: UploadedPhoto }
-  | { type: "new-element"; elementType: "picture" | "text" }
   | null
 
 function EditorContent() {
@@ -44,8 +42,6 @@ function EditorContent() {
 
     if (data?.type === "photo") {
       setActiveDragItem({ type: "photo", photo: data.photo })
-    } else if (data?.type === "new-element") {
-      setActiveDragItem({ type: "new-element", elementType: data.elementType })
     }
   }
 
@@ -57,24 +53,7 @@ function EditorContent() {
     if (!over || !dragData) return
 
     const dropTarget = over.data.current
-    const isCanvasDrop = String(over.id).startsWith("canvas-")
     const isPictureContainerDrop = dropTarget?.type === "picture-container"
-
-    // Get the page ID from the drop target
-    const getTargetPageId = (): string | null => {
-      if (dropTarget?.pageId) return dropTarget.pageId
-      // For canvas drops, determine which page based on left/right
-      if (isCanvasDrop) {
-        const spreadPages = state.pages.slice(
-          state.currentSpreadIndex * 2,
-          state.currentSpreadIndex * 2 + 2
-        )
-        const side = dropTarget?.side || (String(over.id).includes('left') ? 'left' : 'right')
-        const pageIndex = side === 'left' ? 0 : 1
-        return spreadPages[pageIndex]?.id || null
-      }
-      return null
-    }
 
     // Handle photo drops (from sidebar photos panel)
     if (dragData.type === "photo") {
@@ -125,32 +104,6 @@ function EditorContent() {
       }
     }
 
-    // Handle new element creation (from elements panel)
-    if (dragData.type === "new-element" && isCanvasDrop) {
-      const targetPageId = getTargetPageId()
-      if (!targetPageId) return
-
-      const elementType = dragData.elementType
-
-      // Get first zone on the target page
-      const pageZones = state.zones[targetPageId] || []
-      if (pageZones.length === 0) {
-        console.warn("Cannot add element: page has no zones. Apply a layout first.")
-        return
-      }
-      const firstZone = pageZones[0]
-
-      // Create element in first zone with default size
-      addElementToCanvas(firstZone.id, {
-        type: elementType === "picture" ? "photo" : "text",
-        zone_id: firstZone.id,
-        position_x: 25,
-        position_y: 25,
-        width: 50,
-        height: 50,
-        rotation: 0,
-      })
-    }
   }
 
   return (
@@ -171,16 +124,6 @@ function EditorContent() {
         {activeDragItem?.type === "photo" && (
           <div className="w-24 h-24 rounded-lg shadow-2xl overflow-hidden border-2 opacity-80" style={{ backgroundColor: 'var(--color-white)', borderColor: 'var(--color-accent)' }}>
             <img src={activeDragItem.photo.url} alt="Dragging" className="w-full h-full object-cover" />
-          </div>
-        )}
-        {activeDragItem?.type === "new-element" && activeDragItem.elementType === "picture" && (
-          <div className="w-24 h-24 rounded-lg shadow-2xl overflow-hidden border-2 opacity-80 flex items-center justify-center" style={{ backgroundColor: 'var(--color-white)', borderColor: 'var(--color-accent)' }}>
-            <Image className="w-8 h-8" style={{ color: 'var(--color-accent)' }} />
-          </div>
-        )}
-        {activeDragItem?.type === "new-element" && activeDragItem.elementType === "text" && (
-          <div className="w-24 h-24 rounded-lg shadow-2xl overflow-hidden border-2 opacity-80 flex items-center justify-center" style={{ backgroundColor: 'var(--color-white)', borderColor: 'var(--color-accent)' }}>
-            <Type className="w-8 h-8" style={{ color: 'var(--color-accent)' }} />
           </div>
         )}
       </DragOverlay>

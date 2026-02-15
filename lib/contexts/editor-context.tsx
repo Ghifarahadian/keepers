@@ -1,8 +1,41 @@
 "use client"
 
 import React, { createContext, useContext, useReducer, useCallback } from "react"
-import type { Project, Page, PageZone, Element, EditorState, EditorAction, UploadedPhoto, UpdateElementInput, UpdateZoneInput } from "@/types/editor"
-import { updateProject, updateElement, createElement, deleteElement, updateZone } from "@/lib/editor-actions"
+import type { Project, Page, PageZone, Element, EditorState, EditorAction, UploadedPhoto, UpdateElementInput, UpdateZoneInput, CreateZoneInput } from "@/types/editor"
+import { updateProject, updateElement, createElement, deleteElement, updateZone, createZone, deleteZone } from "@/lib/editor-actions"
+
+// ---------------------------------------------------------------------------
+// Page / item mapping helpers
+// ---------------------------------------------------------------------------
+// Pages are laid out as: [front cover] [inner spreads...] [back cover]
+// Item 0         → front cover  (pages[0] only)
+// Items 1..N/2-1 → inner spreads (pages[2k-1], pages[2k])
+// Item N/2       → back cover   (pages[N-1] only)
+
+export function getItemPages(itemIndex: number, pages: Page[]): [Page | null, Page | null] {
+  if (pages.length === 0) return [null, null]
+  if (pages.length === 1) return [pages[0], null]
+  const lastItemIndex = Math.floor(pages.length / 2)
+  if (itemIndex === 0) return [pages[0], null]
+  if (itemIndex >= lastItemIndex) return [null, pages[pages.length - 1]]
+  const leftIndex = itemIndex * 2 - 1
+  return [pages[leftIndex] ?? null, pages[leftIndex + 1] ?? null]
+}
+
+export function getTotalViewItems(pages: Page[]): number {
+  if (pages.length <= 1) return Math.max(1, pages.length)
+  return Math.floor(pages.length / 2) + 1
+}
+
+// Given a page index, return the item index and which side of the canvas it sits on
+export function getItemIndexForPage(pageIndex: number, totalPages: number): [number, 'left' | 'right'] {
+  if (totalPages === 0) return [0, 'left']
+  if (pageIndex === 0) return [0, 'left']
+  if (pageIndex === totalPages - 1) return [Math.floor(totalPages / 2), 'right']
+  const itemIndex = Math.ceil(pageIndex / 2)
+  const side: 'left' | 'right' = pageIndex % 2 === 1 ? 'left' : 'right'
+  return [itemIndex, side]
+}
 
 // Initial state
 const createInitialState = (project: Project, uploadedPhotos?: UploadedPhoto[]): EditorState => {
@@ -24,13 +57,14 @@ const createInitialState = (project: Project, uploadedPhotos?: UploadedPhoto[]):
   return {
     project,
     pages: project.pages || [],
-    currentSpreadIndex: 0, // Start at first spread (pages 0-1)
-    activePageSide: 'right', // Default to right page (front cover on first spread)
+    currentSpreadIndex: 0, // Index into the view-item list (0 = front cover)
+    activePageSide: 'left', // Default to left (front cover is on the left of item 0)
     zones,
     elements,
     uploadedPhotos: uploadedPhotos || [],
     selectedElementId: null,
     selectedZoneId: null,
+    zoneDrawingType: null,
     isSaving: false,
     lastSaved: null,
     error: null,
@@ -74,9 +108,9 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
       const newElements = { ...state.elements }
       delete newZones[action.payload]
       delete newElements[action.payload]
-      // Adjust spread index if it would be out of bounds
-      const maxSpreadIndex = Math.max(0, Math.floor((newPages.length - 1) / 2))
-      const newSpreadIndex = Math.min(state.currentSpreadIndex, maxSpreadIndex)
+      // Adjust item index if it would be out of bounds
+      const maxItemIndex = Math.max(0, Math.floor(newPages.length / 2))
+      const newSpreadIndex = Math.min(state.currentSpreadIndex, maxItemIndex)
       return {
         ...state,
         pages: newPages,
@@ -94,6 +128,28 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         zones: { ...state.zones, [action.payload.pageId]: action.payload.zones },
       }
+
+    case "ADD_ZONE": {
+      const { pageId, zone } = action.payload
+      const existing = state.zones[pageId] || []
+      return {
+        ...state,
+        zones: { ...state.zones, [pageId]: [...existing, zone] },
+      }
+    }
+
+    case "DELETE_ZONE": {
+      const { pageId, zoneId } = action.payload
+      const pageZones = state.zones[pageId] || []
+      const newElements = { ...state.elements }
+      delete newElements[zoneId]
+      return {
+        ...state,
+        zones: { ...state.zones, [pageId]: pageZones.filter(z => z.id !== zoneId) },
+        elements: newElements,
+        selectedZoneId: state.selectedZoneId === zoneId ? null : state.selectedZoneId,
+      }
+    }
 
     case "UPDATE_ZONE": {
       const { pageId, zoneId, updates } = action.payload
@@ -192,6 +248,9 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     case "SET_DRAGGING_ZONE":
       return { ...state, isDraggingZone: action.payload }
 
+    case "SET_ZONE_DRAWING_TYPE":
+      return { ...state, zoneDrawingType: action.payload }
+
     default:
       return state
   }
@@ -215,6 +274,9 @@ interface EditorContextValue {
   // Zone actions
   selectZone: (zoneId: string | null) => void
   updateZonePosition: (zoneId: string, updates: UpdateZoneInput) => Promise<void>
+  addZoneToPage: (pageId: string, input: Omit<CreateZoneInput, 'page_id'>) => Promise<void>
+  deleteZoneFromPage: (zoneId: string) => Promise<void>
+  setZoneDrawingType: (type: "photo" | "text" | null) => void
   setDraggingZone: (isDragging: boolean) => void
 
   // Element actions
@@ -277,13 +339,9 @@ export function EditorProvider({
     dispatch({ type: "SET_CURRENT_SPREAD", payload: spreadIndex })
   }, [])
 
-  // Get current spread pages (left and right)
+  // Get current spread pages (left and right) – uses item-based mapping
   const getCurrentSpreadPages = useCallback((): [Page | null, Page | null] => {
-    const leftIndex = state.currentSpreadIndex * 2
-    const rightIndex = leftIndex + 1
-    const leftPage = state.pages[leftIndex] || null
-    const rightPage = state.pages[rightIndex] || null
-    return [leftPage, rightPage]
+    return getItemPages(state.currentSpreadIndex, state.pages)
   }, [state.currentSpreadIndex, state.pages])
 
   // Set active page side within the spread
@@ -293,8 +351,11 @@ export function EditorProvider({
 
   // Get the currently active page
   const getActivePage = useCallback((): Page | null => {
-    const pageIndex = state.currentSpreadIndex * 2 + (state.activePageSide === 'left' ? 0 : 1)
-    return state.pages[pageIndex] || null
+    const [leftPage, rightPage] = getItemPages(state.currentSpreadIndex, state.pages)
+    // For single-page cover views, return whichever page exists
+    if (leftPage === null) return rightPage  // back cover
+    if (rightPage === null) return leftPage  // front cover
+    return state.activePageSide === 'left' ? leftPage : rightPage
   }, [state.currentSpreadIndex, state.activePageSide, state.pages])
 
   // Helper to find pageId for a zone
@@ -325,10 +386,39 @@ export function EditorProvider({
     }
   }, [findZonePageId])
 
+  // Set zone drawing type (null = exit drawing mode)
+  const setZoneDrawingType = useCallback((type: "photo" | "text" | null) => {
+    dispatch({ type: "SET_ZONE_DRAWING_TYPE", payload: type })
+  }, [])
+
   // Set zone dragging state
   const setDraggingZone = useCallback((isDragging: boolean) => {
     dispatch({ type: "SET_DRAGGING_ZONE", payload: isDragging })
   }, [])
+
+  // Add a new zone to a page
+  const addZoneToPage = useCallback(async (pageId: string, input: Omit<CreateZoneInput, 'page_id'>) => {
+    try {
+      const newZone = await createZone({ ...input, page_id: pageId })
+      dispatch({ type: "ADD_ZONE", payload: { pageId, zone: newZone } })
+    } catch (error) {
+      console.error("Add zone error:", error)
+      dispatch({ type: "SET_ERROR", payload: "Failed to add zone" })
+    }
+  }, [])
+
+  // Delete a zone from a page
+  const deleteZoneFromPage = useCallback(async (zoneId: string) => {
+    const pageId = findZonePageId(zoneId)
+    if (!pageId) return
+    try {
+      await deleteZone(zoneId)
+      dispatch({ type: "DELETE_ZONE", payload: { pageId, zoneId } })
+    } catch (error) {
+      console.error("Delete zone error:", error)
+      dispatch({ type: "SET_ERROR", payload: "Failed to delete zone" })
+    }
+  }, [findZonePageId])
 
   // Add element to canvas
   const addElementToCanvas = useCallback(
@@ -426,12 +516,11 @@ export function EditorProvider({
         if (pageId) {
           const pageIndex = state.pages.findIndex(p => p.id === pageId)
           if (pageIndex !== -1) {
-            const spreadIndex = Math.floor(pageIndex / 2)
-            const pageSide = pageIndex % 2 === 0 ? 'left' : 'right'
+            const [itemIndex, pageSide] = getItemIndexForPage(pageIndex, state.pages.length)
 
-            // Set spread and side before selecting (SET_CURRENT_SPREAD clears selection)
-            if (spreadIndex !== state.currentSpreadIndex) {
-              dispatch({ type: "SET_CURRENT_SPREAD", payload: spreadIndex })
+            // Set item and side before selecting (SET_CURRENT_SPREAD clears selection)
+            if (itemIndex !== state.currentSpreadIndex) {
+              dispatch({ type: "SET_CURRENT_SPREAD", payload: itemIndex })
             }
             if (pageSide !== state.activePageSide) {
               dispatch({ type: "SET_ACTIVE_PAGE_SIDE", payload: pageSide })
@@ -471,6 +560,9 @@ export function EditorProvider({
     getActivePage,
     selectZone,
     updateZonePosition,
+    addZoneToPage,
+    deleteZoneFromPage,
+    setZoneDrawingType,
     setDraggingZone,
     addElementToCanvas,
     updateElementLocal,
