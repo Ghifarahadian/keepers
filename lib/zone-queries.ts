@@ -123,6 +123,35 @@ export async function fetchLayoutDBBySlugWithZones(slug: string): Promise<Layout
 }
 
 /**
+ * Fetch multiple layouts by UUID array with zones (for template expansion)
+ * Single batch query - avoids N+1 queries when expanding a template's layout_ids
+ */
+export async function fetchLayoutsByIdsWithZones(ids: string[]): Promise<LayoutDB[]> {
+  if (ids.length === 0) return []
+
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from("layouts")
+    .select(`
+      *,
+      zones!zones_layout_id_fkey (*)
+    `)
+    .in("id", ids)
+
+  if (error) {
+    console.error("Error fetching layouts by ids:", error)
+    return []
+  }
+
+  // Sort zones within each layout
+  return (data as LayoutDB[]).map((layout) => ({
+    ...layout,
+    zones: (layout.zones || []).sort((a, b) => a.zone_index - b.zone_index),
+  }))
+}
+
+/**
  * Fetch layout by UUID with zones (for admin use)
  * Returns layout as database record with UUID id
  */

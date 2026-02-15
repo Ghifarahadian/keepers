@@ -2,13 +2,13 @@
 
 import { useRef } from "react"
 import { useEditor } from "@/lib/contexts/editor-context"
-import { ZoneContainer } from "./elements/zone-container"
+import { ZoneBox } from "@/components/ui/zone-box"
 import { useDroppable } from "@dnd-kit/core"
 import type { Page } from "@/types/editor"
 
 // Individual page component within the spread
 function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' }) {
-  const { state, selectElement, selectZone, setActivePageSide } = useEditor()
+  const { state, selectElement, selectZone, setActivePageSide, updateZonePosition, setDraggingZone } = useEditor()
   const canvasRef = useRef<HTMLDivElement>(null)
   const { setNodeRef } = useDroppable({
     id: page ? `canvas-${side}` : `canvas-${side}-empty`,
@@ -40,6 +40,8 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
         backgroundColor: 'var(--color-white)',
         outline: isActive ? '2px solid var(--color-accent)' : 'none',
         outlineOffset: '-2px',
+        boxSizing: 'border-box', // ← Match admin canvas
+        overflow: 'hidden', // ← Ensure zones are clipped properly
       }}
     >
       {page ? (
@@ -48,12 +50,18 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
           // Get elements for this zone from state.elements (keyed by zoneId)
           const zoneElements = state.elements[zone.id] || []
           return (
-            <ZoneContainer
+            <ZoneBox
               key={zone.id}
               zone={zone}
+              mode="editor"
               pageId={page.id}
               elements={zoneElements}
+              isSelected={state.selectedZoneId === zone.id}
               canvasRef={canvasRef}
+              onUpdate={(updates) => updateZonePosition(zone.id, updates)}
+              onSelect={() => selectZone(zone.id)}
+              onDragStart={() => setDraggingZone(true)}
+              onDragEnd={() => setDraggingZone(false)}
             />
           )
         })

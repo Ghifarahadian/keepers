@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { X, ArrowLeft, Loader2, Star, Check } from "lucide-react"
-import type { TemplateCategory } from "@/types/template"
-import type { Project } from "@/types/editor"
+import type { Template, TemplateCategory } from "@/types/template"
 import { getTemplates, getTemplateCategories, createProjectFromTemplate } from "@/lib/template-actions"
 
 interface TemplateBrowserProps {
@@ -14,7 +13,7 @@ interface TemplateBrowserProps {
 
 export function TemplateBrowser({ onBack, onClose }: TemplateBrowserProps) {
   const router = useRouter()
-  const [templates, setTemplates] = useState<Project[]>([])
+  const [templates, setTemplates] = useState<Template[]>([])
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -209,7 +208,7 @@ export function TemplateBrowser({ onBack, onClose }: TemplateBrowserProps) {
 }
 
 interface TemplateCardProps {
-  template: Project
+  template: Template
   isSelected: boolean
   isCreating: boolean
   onSelect: () => void

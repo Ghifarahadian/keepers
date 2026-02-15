@@ -93,18 +93,14 @@ DROP FUNCTION IF EXISTS public.delete_user_account() CASCADE;
 DROP FUNCTION IF EXISTS public.update_project_last_edited() CASCADE;
 DROP FUNCTION IF EXISTS public.update_project_last_edited_from_element() CASCADE;
 
--- Drop storage objects first (to avoid FK constraint violations)
-DELETE FROM storage.objects WHERE bucket_id = 'project-photos';
-DELETE FROM storage.objects WHERE bucket_id = 'template-assets';
-
--- Drop storage buckets
-DELETE FROM storage.buckets WHERE id = 'project-photos';
-DELETE FROM storage.buckets WHERE id = 'template-assets';
-
 -- ============================================
 -- DATABASE RESET COMPLETE
 -- ============================================
--- Now run setup.sql to recreate everything
+-- Now run setup.sql to recreate everything.
+-- NOTE: Storage buckets (project-photos, template-assets) must be
+-- managed via the Supabase Dashboard > Storage — they cannot be
+-- deleted via SQL. The setup.sql INSERT ... ON CONFLICT DO NOTHING
+-- will skip recreating them if they already exist, which is fine.
 -- ============================================
 
 SELECT 'Database reset completed! All tables, functions, triggers, and policies have been dropped.' AS status;

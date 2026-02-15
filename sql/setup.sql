@@ -254,7 +254,9 @@ CREATE TABLE IF NOT EXISTS public.templates (
   title VARCHAR(255) NOT NULL,
   description TEXT,
   category_id UUID REFERENCES public.template_categories(id) ON DELETE SET NULL,
-  project_id UUID UNIQUE REFERENCES public.projects(id) ON DELETE CASCADE,
+  page_count INT CHECK (page_count IN (30, 40)),
+  paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only')),
+  layout_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
   thumbnail_url TEXT,
   preview_images JSONB,
   is_featured BOOLEAN DEFAULT FALSE,
@@ -268,7 +270,7 @@ ALTER TABLE public.templates ENABLE ROW LEVEL SECURITY;
 
 CREATE INDEX IF NOT EXISTS idx_templates_slug ON public.templates(slug);
 CREATE INDEX IF NOT EXISTS idx_templates_category ON public.templates(category_id);
-CREATE INDEX IF NOT EXISTS idx_templates_project ON public.templates(project_id);
+CREATE INDEX IF NOT EXISTS idx_templates_page_count ON public.templates(page_count);
 CREATE INDEX IF NOT EXISTS idx_templates_featured ON public.templates(is_featured) WHERE is_featured = TRUE;
 CREATE INDEX IF NOT EXISTS idx_templates_active ON public.templates(is_active) WHERE is_active = TRUE;
 

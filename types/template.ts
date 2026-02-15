@@ -11,7 +11,7 @@
 // DATABASE TYPES (from Supabase tables)
 // ============================================
 
-import type { Zone, Page, PaperSize, PageCount } from './editor'
+import type { Zone, PaperSize, PageCount } from './editor'
 
 export interface LayoutDB {
   id: string
@@ -56,7 +56,9 @@ export interface Template {
   description: string | null
   category_id: string | null
   category?: TemplateCategory | null // Joined from template_categories
-  project_id: string | null // 1-1 mapping to projects table
+  page_count: PageCount | null
+  paper_size: PaperSize | null
+  layout_ids: string[] // Ordered array of layout UUIDs, length = page_count
   thumbnail_url: string | null
   preview_images: string[] | null // JSONB array
   is_featured: boolean
@@ -64,7 +66,6 @@ export interface Template {
   is_active: boolean
   created_at: string
   updated_at: string
-  pages?: Page[] // Optional: pages from template project (mapped from template_project.pages)
 }
 
 // ============================================
@@ -121,7 +122,9 @@ export interface CreateTemplateInput {
   title: string
   description?: string
   category_id?: string
-  project_id: string // Required: the template project to copy from
+  page_count: PageCount
+  paper_size: PaperSize
+  layout_ids: string[] // Ordered array of layout UUIDs, length must equal page_count
   thumbnail_url?: string
   preview_images?: string[]
   is_featured?: boolean
@@ -132,7 +135,9 @@ export interface UpdateTemplateInput {
   title?: string
   description?: string
   category_id?: string
-  project_id?: string
+  page_count?: PageCount
+  paper_size?: PaperSize
+  layout_ids?: string[]
   thumbnail_url?: string
   preview_images?: string[]
   is_featured?: boolean

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react"
 import { Trash2, Image, Type, X } from "lucide-react"
-import { ZoneEditBox } from "./zone-edit-box"
+import { ZoneBox } from "@/components/ui/zone-box"
 
 export type ZoneType = "photo" | "text"
 
@@ -24,6 +24,7 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null)
+  const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null)
   const [newZoneType, setNewZoneType] = useState<ZoneType>("photo")
 
   const getMousePosition = useCallback((e: React.MouseEvent) => {
@@ -48,8 +49,11 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
     }
   }
 
-  const handleMouseMove = () => {
-    // Drawing preview is handled by JSX rendering
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDrawing && drawStart) {
+      const pos = getMousePosition(e)
+      setDrawCurrent(pos)
+    }
   }
 
   const handleMouseUp = (e: React.MouseEvent) => {
@@ -75,18 +79,7 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
 
     setIsDrawing(false)
     setDrawStart(null)
-  }
-
-  const addZone = (type: ZoneType) => {
-    const newZone: Zone = {
-      position_x: 10,
-      position_y: 10,
-      width: 30,
-      height: type === "text" ? 15 : 30,
-      zone_type: type,
-    }
-    onChange([...zones, newZone])
-    setSelectedIndex(zones.length)
+    setDrawCurrent(null)
   }
 
   const deleteZone = (index: number) => {
@@ -111,11 +104,13 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
       {/* Canvas */}
       <div
         ref={canvasRef}
-        className="relative border-2 rounded-lg cursor-crosshair select-none"
+        className="relative rounded-lg cursor-crosshair select-none mx-auto"
         style={{
           aspectRatio: "8.5 / 11",
           backgroundColor: "var(--color-white)",
-          borderColor: "var(--color-border)",
+          boxShadow: "inset 0 0 0 2px var(--color-border)",
+          width: "min(495px, 95%)",
+          maxHeight: "85vh",
         }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -137,26 +132,29 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
 
         {/* Zones */}
         {zones.map((zone, index) => (
-          <ZoneEditBox
+          <ZoneBox
             key={index}
             zone={zone}
+            mode="admin"
             index={index}
             isSelected={selectedIndex === index}
             canvasRef={canvasRef}
-            onUpdate={updateZone}
-            onSelect={setSelectedIndex}
+            onUpdate={(updates) => updateZone(index, updates)}
+            onSelect={() => setSelectedIndex(index)}
           />
         ))}
 
         {/* Draw preview */}
-        {isDrawing && drawStart && (
+        {isDrawing && drawStart && drawCurrent && (
           <div
             className="absolute border-2 border-dashed pointer-events-none"
             style={{
-              left: `${drawStart.x}%`,
-              top: `${drawStart.y}%`,
-              borderColor: "var(--color-accent)",
-              backgroundColor: "rgba(212, 120, 108, 0.1)",
+              left: `${Math.min(drawStart.x, drawCurrent.x)}%`,
+              top: `${Math.min(drawStart.y, drawCurrent.y)}%`,
+              width: `${Math.abs(drawCurrent.x - drawStart.x)}%`,
+              height: `${Math.abs(drawCurrent.y - drawStart.y)}%`,
+              borderColor: newZoneType === "photo" ? "var(--color-accent)" : "#2F6F73",
+              backgroundColor: newZoneType === "photo" ? "rgba(212, 120, 108, 0.1)" : "rgba(47, 111, 115, 0.1)",
             }}
           />
         )}
@@ -207,28 +205,9 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
           </button>
         </div>
 
-        <div className="h-6 w-px bg-gray-300" />
-
-        <button
-          type="button"
-          onClick={() => addZone("photo")}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm"
-          style={{ borderColor: "var(--color-accent)", color: "var(--color-accent)" }}
-        >
-          <Image className="w-4 h-4" />
-          Add Photo Zone
-        </button>
-        <button
-          type="button"
-          onClick={() => addZone("text")}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm"
-          style={{ borderColor: "#2F6F73", color: "#2F6F73" }}
-        >
-          <Type className="w-4 h-4" />
-          Add Text Zone
-        </button>
         {selectedIndex !== null && (
           <>
+            <div className="h-6 w-px bg-gray-300" />
             <button
               type="button"
               onClick={() => setSelectedIndex(null)}

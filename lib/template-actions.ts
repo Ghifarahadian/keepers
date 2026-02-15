@@ -6,6 +6,7 @@ import type { Project } from "@/types/editor"
 import type { Template, TemplateCategory } from "@/types/template"
 import { applyVoucherToProject } from "@/lib/voucher-actions"
 import { copyZones } from "@/lib/zone-operations"
+import { fetchLayoutsByIdsWithZones } from "@/lib/zone-queries"
 
 // ============================================
 // TEMPLATE CATEGORY ACTIONS
@@ -116,7 +117,7 @@ export async function getFeaturedTemplates(): Promise<Template[]> {
 }
 
 /**
- * Get a single template with all pages and zones (via project_id)
+ * Get a single template by ID
  */
 export async function getTemplate(templateId: string): Promise<Template | null> {
   const supabase = await createClient()
@@ -125,14 +126,7 @@ export async function getTemplate(templateId: string): Promise<Template | null> 
     .from("templates")
     .select(`
       *,
-      category:template_categories(*),
-      template_project:projects!project_id (
-        *,
-        pages (
-          *,
-          zones!zones_page_id_fkey (*)
-        )
-      )
+      category:template_categories(*)
     `)
     .eq("id", templateId)
     .eq("is_active", true)
@@ -143,18 +137,11 @@ export async function getTemplate(templateId: string): Promise<Template | null> 
     return null
   }
 
-  // Map template_project.pages to template.pages for backward compatibility
-  const template = data as any
-  if (template.template_project?.pages) {
-    template.pages = template.template_project.pages
-    template.pages.sort((a: any, b: any) => a.page_number - b.page_number)
-  }
-
-  return template as Template
+  return data as Template
 }
 
 /**
- * Get a template by slug (via project_id)
+ * Get a template by slug
  */
 export async function getTemplateBySlug(slug: string): Promise<Template | null> {
   const supabase = await createClient()
@@ -163,14 +150,7 @@ export async function getTemplateBySlug(slug: string): Promise<Template | null> 
     .from("templates")
     .select(`
       *,
-      category:template_categories(*),
-      template_project:projects!project_id (
-        *,
-        pages (
-          *,
-          zones!zones_page_id_fkey (*)
-        )
-      )
+      category:template_categories(*)
     `)
     .eq("slug", slug)
     .eq("is_active", true)
@@ -178,14 +158,7 @@ export async function getTemplateBySlug(slug: string): Promise<Template | null> 
 
   if (error || !data) return null
 
-  // Map template_project.pages to template.pages for backward compatibility
-  const template = data as any
-  if (template.template_project?.pages) {
-    template.pages = template.template_project.pages
-    template.pages.sort((a: any, b: any) => a.page_number - b.page_number)
-  }
-
-  return template as Template
+  return data as Template
 }
 
 // ============================================
@@ -194,7 +167,7 @@ export async function getTemplateBySlug(slug: string): Promise<Template | null> 
 
 /**
  * Create a new project from a template
- * Copies template's project (with pages and zones) to create a new user project
+ * Fetches layouts live from DB and copies zones fresh — layout updates are always reflected
  */
 export async function createProjectFromTemplate(
   templateId: string,
@@ -210,37 +183,32 @@ export async function createProjectFromTemplate(
     throw new Error("Unauthorized")
   }
 
-  // Get template with its project_id
+  // Fetch template (no template_project join needed)
   const { data: template, error: templateError } = await supabase
     .from("templates")
-    .select(`
-      *,
-      template_project:projects!project_id (
-        *,
-        pages (
-          *,
-          zones!zones_page_id_fkey (*)
-        )
-      )
-    `)
+    .select("id, title, page_count, paper_size, layout_ids")
     .eq("id", templateId)
     .eq("is_active", true)
     .single()
 
-  if (templateError || !template || !template.template_project) {
+  if (templateError || !template) {
     throw new Error("Template not found")
   }
 
-  const templateProject = template.template_project
+  const layoutIds: string[] = template.layout_ids || []
 
-  // Create new project (copy configuration from template's project)
+  if (!template.page_count || layoutIds.length !== template.page_count) {
+    throw new Error("Template configuration is invalid")
+  }
+
+  // Create new user project from template configuration
   const { data: project, error: projectError } = await supabase
     .from("projects")
     .insert({
       user_id: user.id,
       title: projectTitle || template.title,
-      page_count: templateProject.page_count,
-      paper_size: templateProject.paper_size,
+      page_count: template.page_count,
+      paper_size: template.paper_size,
       voucher_code: voucherCode || null,
       status: "draft",
     })
@@ -253,106 +221,39 @@ export async function createProjectFromTemplate(
   if (voucherCode) {
     const applyResult = await applyVoucherToProject(voucherCode, project.id)
     if (!applyResult.success) {
-      // If voucher application fails, delete the project and throw error
       await supabase.from("projects").delete().eq("id", project.id)
       throw new Error(applyResult.error || "Failed to apply voucher")
     }
   }
 
-  // Copy pages from template project
-  if (templateProject.pages && templateProject.pages.length > 0) {
-    for (const templatePage of templateProject.pages) {
-      // Create page
-      const { data: newPage, error: pageError } = await supabase
-        .from("pages")
-        .insert({
-          project_id: project.id,
-          page_number: templatePage.page_number,
-          title: templatePage.title,
-        })
-        .select()
-        .single()
+  // Batch fetch all unique layouts with their zones (single query)
+  const uniqueLayoutIds = [...new Set(layoutIds)]
+  const layouts = await fetchLayoutsByIdsWithZones(uniqueLayoutIds)
+  const layoutZonesMap: Record<string, typeof layouts[0]['zones']> = {}
+  for (const layout of layouts) {
+    layoutZonesMap[layout.id] = layout.zones || []
+  }
 
-      if (pageError) throw pageError
+  // Create pages and copy zones from live layout definitions
+  for (let i = 0; i < layoutIds.length; i++) {
+    const layoutId = layoutIds[i]
+    const pageNumber = i + 1
 
-      // Copy zones for this page using shared utility
-      if (templatePage.zones && templatePage.zones.length > 0) {
-        const newZones = await copyZones(templatePage.zones, 'page', newPage.id)
-
-        // Copy elements for each zone (if any exist in template)
-        if (newZones && templatePage.zones.length > 0) {
-          const { data: templateElements, error: elementsQueryError } = await supabase
-            .from("elements")
-            .select("*")
-            .in("zone_id", templatePage.zones.map((z: any) => z.id))
-
-          if (elementsQueryError) {
-            console.error("Error fetching template elements:", elementsQueryError)
-          } else if (templateElements && templateElements.length > 0) {
-            // Map old zone IDs to new zone IDs
-            const zoneIdMap: Record<string, string> = {}
-            templatePage.zones.forEach((oldZone: any, index: number) => {
-              zoneIdMap[oldZone.id] = newZones[index].id
-            })
-
-            const elementsToCreate = templateElements.map((element: any) => ({
-              zone_id: zoneIdMap[element.zone_id],
-              type: element.type,
-              photo_url: element.photo_url,
-              photo_storage_path: element.photo_storage_path,
-              text_content: element.text_content,
-              font_family: element.font_family,
-              font_size: element.font_size,
-              font_color: element.font_color,
-              font_weight: element.font_weight,
-              font_style: element.font_style,
-              text_align: element.text_align,
-              text_decoration: element.text_decoration,
-              position_x: element.position_x,
-              position_y: element.position_y,
-              width: element.width,
-              height: element.height,
-              rotation: element.rotation,
-            }))
-
-            const { error: elementsError } = await supabase
-              .from("elements")
-              .insert(elementsToCreate)
-
-            if (elementsError) {
-              console.error("Error creating elements:", elementsError)
-              throw elementsError
-            }
-          }
-        }
-      }
-    }
-  } else {
-    // If template has no pages, create default blank pages based on page_count
-    const pageCount = project.page_count || 30
-    const totalSpreads = pageCount / 2
-    const pagesToCreate = []
-
-    for (let spreadIndex = 0; spreadIndex < totalSpreads; spreadIndex++) {
-      const leftPageNumber = spreadIndex * 2 + 1
-      const rightPageNumber = spreadIndex * 2 + 2
-
-      pagesToCreate.push({
-        project_id: project.id,
-        page_number: leftPageNumber,
-      })
-
-      pagesToCreate.push({
-        project_id: project.id,
-        page_number: rightPageNumber,
-      })
-    }
-
-    const { error: pagesError } = await supabase
+    const { data: newPage, error: pageError } = await supabase
       .from("pages")
-      .insert(pagesToCreate)
+      .insert({
+        project_id: project.id,
+        page_number: pageNumber,
+      })
+      .select()
+      .single()
 
-    if (pagesError) throw pagesError
+    if (pageError) throw pageError
+
+    const zones = layoutZonesMap[layoutId] || []
+    if (zones.length > 0) {
+      await copyZones(zones, 'page', newPage.id)
+    }
   }
 
   revalidatePath("/editor/new")

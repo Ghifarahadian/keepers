@@ -3,12 +3,12 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Edit, Trash2, Star, Eye, EyeOff } from "lucide-react"
-import type { AdminProject } from "@/types/template"
+import type { Template } from "@/types/template"
 import { deleteTemplate, updateTemplate } from "@/lib/admin-actions"
 import { useState } from "react"
 
 interface TemplateListProps {
-  templates: AdminProject[]
+  templates: Template[]
 }
 
 export function TemplateList({ templates }: TemplateListProps) {
@@ -16,7 +16,7 @@ export function TemplateList({ templates }: TemplateListProps) {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
 
-  const handleDelete = async (template: AdminProject) => {
+  const handleDelete = async (template: Template) => {
     if (!confirm(`Are you sure you want to delete "${template.title}"?`)) {
       return
     }
@@ -33,7 +33,7 @@ export function TemplateList({ templates }: TemplateListProps) {
     }
   }
 
-  const handleToggleFeatured = async (template: AdminProject) => {
+  const handleToggleFeatured = async (template: Template) => {
     setToggling(template.id)
     try {
       await updateTemplate(template.id, { is_featured: !template.is_featured })
@@ -45,7 +45,7 @@ export function TemplateList({ templates }: TemplateListProps) {
     }
   }
 
-  const handleToggleActive = async (template: AdminProject) => {
+  const handleToggleActive = async (template: Template) => {
     setToggling(template.id)
     try {
       await updateTemplate(template.id, { is_active: !template.is_active })

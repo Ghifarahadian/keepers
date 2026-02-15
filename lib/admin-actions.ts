@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import type {
   AdminProfile,
   AdminProject,
+  Template,
   LayoutDB,
   TemplateCategory,
   CreateLayoutInput,
@@ -17,9 +18,8 @@ import type { PageCount, PaperSize, Project } from "@/types/editor"
 import {
   fetchAllLayoutsWithZones,
   fetchLayoutByIdWithZones,
-  fetchLayoutDBBySlugWithZones,
 } from "@/lib/zone-queries"
-import { createZones, deleteZonesForParent, copyZones } from "@/lib/zone-operations"
+import { createZones, deleteZonesForParent } from "@/lib/zone-operations"
 
 // ============================================
 // ADMIN AUTH ACTIONS
@@ -315,7 +315,7 @@ export async function deleteCategory(categoryId: string): Promise<void> {
 /**
  * Get all templates (including inactive) for admin
  */
-export async function getAdminTemplates() {
+export async function getAdminTemplates(): Promise<Template[]> {
   const supabase = await createClient()
 
   if (!(await isAdmin())) {
@@ -335,13 +335,13 @@ export async function getAdminTemplates() {
     return []
   }
 
-  return data
+  return data as Template[]
 }
 
 /**
- * Get a single template with pages for admin
+ * Get a single template for admin
  */
-export async function getAdminTemplate(templateId: string) {
+export async function getAdminTemplate(templateId: string): Promise<Template | null> {
   const supabase = await createClient()
 
   if (!(await isAdmin())) {
@@ -352,27 +352,14 @@ export async function getAdminTemplate(templateId: string) {
     .from("templates")
     .select(`
       *,
-      category:template_categories(*),
-      template_project:projects!project_id(
-        *,
-        pages(
-          *,
-          zones!zones_page_id_fkey(*)
-        )
-      )
+      category:template_categories(*)
     `)
     .eq("id", templateId)
     .single()
 
   if (error) return null
 
-  // Map template_project.pages to data.pages for backward compatibility
-  if (data.template_project?.pages) {
-    data.pages = data.template_project.pages
-    data.pages.sort((a: any, b: any) => a.page_number - b.page_number)
-  }
-
-  return data
+  return data as Template
 }
 
 /**
@@ -384,9 +371,10 @@ export async function createTemplate(input: {
   description?: string
   category_id?: string
   thumbnail_url?: string
-  page_count?: PageCount
-  paper_size?: PaperSize
-  pages: Array<{ page_number: number; layout_slug: string; title?: string }>
+  page_count: PageCount
+  paper_size: PaperSize
+  layout_ids: string[] // Ordered array of layout UUIDs, length must equal page_count
+  is_featured?: boolean
 }) {
   const supabase = await createClient()
 
@@ -394,78 +382,23 @@ export async function createTemplate(input: {
     throw new Error("Unauthorized")
   }
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    throw new Error("Unauthorized")
+  if (input.layout_ids.length !== input.page_count) {
+    throw new Error(`layout_ids length (${input.layout_ids.length}) must match page_count (${input.page_count})`)
   }
 
-  // Step 1: Create a template project (owned by admin)
-  const { data: templateProject, error: projectError } = await supabase
-    .from("projects")
-    .insert({
-      user_id: user.id, // Admin user
-      title: `[Template] ${input.title}`,
-      page_count: input.page_count || input.pages.length,
-      paper_size: input.paper_size || 'A4',
-      status: "draft",
-    })
-    .select()
-    .single()
+  // Validate that all layout UUIDs exist
+  const uniqueIds = [...new Set(input.layout_ids)]
+  const { data: existingLayouts, error: layoutCheckError } = await supabase
+    .from("layouts")
+    .select("id")
+    .in("id", uniqueIds)
 
-  if (projectError) throw projectError
+  if (layoutCheckError) throw layoutCheckError
 
-  // Step 2: Create template pages with zones copied from layouts
-  if (input.pages.length > 0) {
-    for (const pageInput of input.pages) {
-      console.log(`Creating page ${pageInput.page_number} with layout: ${pageInput.layout_slug}`)
-
-      // Create page for template project
-      const { data: page, error: pageError } = await supabase
-        .from("pages")
-        .insert({
-          project_id: templateProject.id,
-          page_number: pageInput.page_number,
-          title: pageInput.title,
-          layout_slug: pageInput.layout_slug, // Store which layout was used
-        })
-        .select()
-        .single()
-
-      if (pageError) {
-        console.error(`Error creating page ${pageInput.page_number}:`, pageError)
-        throw pageError
-      }
-
-      console.log(`✓ Page ${pageInput.page_number} created with ID: ${page.id}`)
-
-      // Copy zones from layout using shared utility
-      if (pageInput.layout_slug && pageInput.layout_slug !== 'blank') {
-        console.log(`Fetching layout "${pageInput.layout_slug}"...`)
-        const layout = await fetchLayoutDBBySlugWithZones(pageInput.layout_slug)
-
-        if (!layout) {
-          console.error(`✗ Layout "${pageInput.layout_slug}" not found!`)
-        } else if (!layout.zones || layout.zones.length === 0) {
-          console.warn(`⚠ Layout "${pageInput.layout_slug}" has no zones!`)
-        } else {
-          console.log(`✓ Layout "${pageInput.layout_slug}" found with ${layout.zones.length} zones`)
-          console.log('Zones to copy:', layout.zones)
-
-          try {
-            const copiedZones = await copyZones(layout.zones, 'page', page.id)
-            console.log(`✓ Successfully copied ${copiedZones.length} zones to page ${pageInput.page_number}`)
-          } catch (error) {
-            console.error(`✗ Error copying zones to page ${pageInput.page_number}:`, error)
-            throw error
-          }
-        }
-      } else {
-        console.log(`Page ${pageInput.page_number} is blank, no zones to copy`)
-      }
-    }
+  if (existingLayouts.length !== uniqueIds.length) {
+    throw new Error("One or more layout IDs are invalid")
   }
 
-  // Step 3: Create template record with project_id
   const { data: template, error: templateError } = await supabase
     .from("templates")
     .insert({
@@ -473,8 +406,11 @@ export async function createTemplate(input: {
       title: input.title,
       description: input.description,
       category_id: input.category_id,
-      project_id: templateProject.id,
+      page_count: input.page_count,
+      paper_size: input.paper_size,
+      layout_ids: input.layout_ids,
       thumbnail_url: input.thumbnail_url,
+      is_featured: input.is_featured ?? false,
       is_active: true,
     })
     .select()
@@ -504,6 +440,7 @@ export async function updateTemplate(
     is_active?: boolean
     page_count?: PageCount
     paper_size?: PaperSize
+    layout_ids?: string[]
   }
 ): Promise<void> {
   const supabase = await createClient()
@@ -512,40 +449,41 @@ export async function updateTemplate(
     throw new Error("Unauthorized")
   }
 
-  // Extract project-specific fields
-  const { page_count, paper_size, ...templateFields } = input
+  // Validate layout_ids length if provided
+  if (input.layout_ids !== undefined) {
+    const targetPageCount = input.page_count ?? (await (async () => {
+      const { data } = await supabase
+        .from("templates")
+        .select("page_count")
+        .eq("id", templateId)
+        .single()
+      return data?.page_count
+    })())
 
-  // Update template fields
-  if (Object.keys(templateFields).length > 0) {
-    const { error } = await supabase
-      .from("templates")
-      .update(templateFields)
-      .eq("id", templateId)
+    if (targetPageCount !== undefined && input.layout_ids.length !== targetPageCount) {
+      throw new Error(`layout_ids length (${input.layout_ids.length}) must match page_count (${targetPageCount})`)
+    }
 
-    if (error) throw error
-  }
+    // Validate all layout UUIDs exist
+    const uniqueIds = [...new Set(input.layout_ids)]
+    const { data: existingLayouts, error: layoutCheckError } = await supabase
+      .from("layouts")
+      .select("id")
+      .in("id", uniqueIds)
 
-  // Update template project fields if provided
-  if (page_count !== undefined || paper_size !== undefined) {
-    const { data: template } = await supabase
-      .from("templates")
-      .select("project_id")
-      .eq("id", templateId)
-      .single()
+    if (layoutCheckError) throw layoutCheckError
 
-    if (template?.project_id) {
-      const projectUpdates: any = {}
-      if (page_count !== undefined) projectUpdates.page_count = page_count
-      if (paper_size !== undefined) projectUpdates.paper_size = paper_size
-
-      const { error: projectError } = await supabase
-        .from("projects")
-        .update(projectUpdates)
-        .eq("id", template.project_id)
-
-      if (projectError) throw projectError
+    if (existingLayouts.length !== uniqueIds.length) {
+      throw new Error("One or more layout IDs are invalid")
     }
   }
+
+  const { error } = await supabase
+    .from("templates")
+    .update(input)
+    .eq("id", templateId)
+
+  if (error) throw error
 
   revalidatePath("/admin/templates")
   revalidatePath(`/admin/templates/${templateId}`)
@@ -569,209 +507,6 @@ export async function deleteTemplate(templateId: string): Promise<void> {
   if (error) throw error
 
   revalidatePath("/admin/templates")
-}
-
-/**
- * Add a page to a template
- */
-export async function addTemplatePage(
-  templateId: string,
-  pageNumber: number,
-  layoutSlug: string,
-  title?: string
-): Promise<void> {
-  const supabase = await createClient()
-
-  if (!(await isAdmin())) {
-    throw new Error("Unauthorized")
-  }
-
-  // Get template's project_id
-  const { data: template, error: templateError } = await supabase
-    .from("templates")
-    .select("project_id")
-    .eq("id", templateId)
-    .single()
-
-  if (templateError || !template?.project_id) {
-    throw new Error("Template not found or missing project_id")
-  }
-
-  // Create page for template project
-  const { data: page, error: pageError } = await supabase
-    .from("pages")
-    .insert({
-      project_id: template.project_id,
-      page_number: pageNumber,
-      title,
-    })
-    .select()
-    .single()
-
-  if (pageError) throw pageError
-
-  // Copy zones from layout using shared utility
-  if (layoutSlug && layoutSlug !== 'blank') {
-    const layout = await fetchLayoutDBBySlugWithZones(layoutSlug)
-
-    if (layout && layout.zones && layout.zones.length > 0) {
-      await copyZones(layout.zones, 'page', page.id)
-    }
-  }
-
-  // Update template project's page_count
-  const { data: pages } = await supabase
-    .from("pages")
-    .select("id")
-    .eq("project_id", template.project_id)
-
-  await supabase
-    .from("projects")
-    .update({ page_count: pages?.length || 0 })
-    .eq("id", template.project_id)
-
-  revalidatePath(`/admin/templates/${templateId}`)
-}
-
-/**
- * Update a template page
- */
-export async function updateTemplatePage(
-  pageId: string,
-  layoutSlug?: string,
-  title?: string | null
-): Promise<void> {
-  const supabase = await createClient()
-
-  if (!(await isAdmin())) {
-    throw new Error("Unauthorized")
-  }
-
-  // Update title and/or layout_slug if provided
-  const pageUpdates: any = {}
-  if (title !== undefined) {
-    pageUpdates.title = title
-  }
-  if (layoutSlug !== undefined) {
-    pageUpdates.layout_slug = layoutSlug
-  }
-
-  if (Object.keys(pageUpdates).length > 0) {
-    const { error } = await supabase
-      .from("pages")
-      .update(pageUpdates)
-      .eq("id", pageId)
-
-    if (error) throw error
-  }
-
-  // Update layout by copying zones
-  if (layoutSlug !== undefined) {
-    // Delete existing zones using shared utility
-    await deleteZonesForParent('page', pageId)
-
-    // Copy zones from new layout using shared utility
-    if (layoutSlug && layoutSlug !== 'blank') {
-      const layout = await fetchLayoutDBBySlugWithZones(layoutSlug)
-
-      if (layout && layout.zones && layout.zones.length > 0) {
-        await copyZones(layout.zones, 'page', pageId)
-      }
-    }
-  }
-
-  // Get template ID for revalidation via project_id
-  const { data: page } = await supabase
-    .from("pages")
-    .select("project_id")
-    .eq("id", pageId)
-    .single()
-
-  if (page?.project_id) {
-    // Find template that uses this project
-    const { data: template } = await supabase
-      .from("templates")
-      .select("id")
-      .eq("project_id", page.project_id)
-      .single()
-
-    if (template) {
-      revalidatePath(`/admin/templates/${template.id}`)
-    }
-  }
-}
-
-/**
- * Delete a template page
- */
-export async function deleteTemplatePage(pageId: string): Promise<void> {
-  const supabase = await createClient()
-
-  if (!(await isAdmin())) {
-    throw new Error("Unauthorized")
-  }
-
-  // Get project ID before deletion
-  const { data: page } = await supabase
-    .from("pages")
-    .select("project_id")
-    .eq("id", pageId)
-    .single()
-
-  const { error } = await supabase
-    .from("pages")
-    .delete()
-    .eq("id", pageId)
-
-  if (error) throw error
-
-  // Update template project's page count
-  if (page?.project_id) {
-    const { data: pages } = await supabase
-      .from("pages")
-      .select("id")
-      .eq("project_id", page.project_id)
-
-    await supabase
-      .from("projects")
-      .update({ page_count: pages?.length || 0 })
-      .eq("id", page.project_id)
-
-    // Find template that uses this project
-    const { data: template } = await supabase
-      .from("templates")
-      .select("id")
-      .eq("project_id", page.project_id)
-      .single()
-
-    if (template) {
-      revalidatePath(`/admin/templates/${template.id}`)
-    }
-  }
-}
-
-/**
- * Reorder template pages
- */
-export async function reorderTemplatePages(
-  templateId: string,
-  pageIds: string[]
-): Promise<void> {
-  const supabase = await createClient()
-
-  if (!(await isAdmin())) {
-    throw new Error("Unauthorized")
-  }
-
-  // Update page numbers based on new order
-  for (let i = 0; i < pageIds.length; i++) {
-    await supabase
-      .from("pages")
-      .update({ page_number: i + 1 })
-      .eq("id", pageIds[i])
-  }
-
-  revalidatePath(`/admin/templates/${templateId}`)
 }
 
 // ============================================

@@ -2,23 +2,16 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { createTemplate, updateTemplate, updateTemplatePage, getAdminCategories, getAdminLayouts } from "@/lib/admin-actions"
-import type { Project } from "@/types/editor"
-import type { TemplateCategory, LayoutDB } from "@/types/template"
+import { createTemplate, updateTemplate, getAdminCategories, getAdminLayouts } from "@/lib/admin-actions"
+import type { Template, TemplateCategory, LayoutDB } from "@/types/template"
+import type { PageCount, PaperSize } from "@/types/editor"
 import { PageBuilder } from "./page-builder"
 import { Loader2, Save, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 interface TemplateFormProps {
-  template?: Project
+  template?: Template
   isEdit?: boolean
-}
-
-interface PageInput {
-  page_number: number
-  layout_slug: string
-  title?: string
-  id?: string // Page ID for edit mode
 }
 
 export function TemplateForm({ template, isEdit }: TemplateFormProps) {
@@ -35,9 +28,9 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
   const [thumbnailUrl, setThumbnailUrl] = useState(template?.thumbnail_url || "")
   const [isFeatured, setIsFeatured] = useState(template?.is_featured ?? false)
   const [isActive, setIsActive] = useState(template?.is_active ?? true)
-  const [pageCount, setPageCount] = useState<30 | 40>(template?.page_count || 30)
-  const [pages, setPages] = useState<PageInput[]>([])
-  const [changedPageLayouts, setChangedPageLayouts] = useState<Map<string, string>>(new Map())
+  const [pageCount, setPageCount] = useState<PageCount>(template?.page_count || 30)
+  const [paperSize, setPaperSize] = useState<PaperSize>(template?.paper_size || "A4")
+  const [layoutIds, setLayoutIds] = useState<string[]>(template?.layout_ids || [])
 
   // Load categories and layouts
   useEffect(() => {
@@ -52,57 +45,22 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
     loadData()
   }, [])
 
-  // Initialize pages when layouts load
+  // Initialize layoutIds once layouts are loaded (new template only)
   useEffect(() => {
-    if (layouts.length > 0 && pages.length === 0) {
-      if (!isEdit) {
-        // New template: Generate pages based on page count with default layout
-        const defaultLayout = layouts.find((l) => l.is_active) || layouts[0]
-        const defaultSlug = defaultLayout?.slug || "blank"
-
-        const initialPages: PageInput[] = []
-        for (let i = 1; i <= pageCount; i++) {
-          initialPages.push({
-            page_number: i,
-            layout_slug: defaultSlug,
-          })
-        }
-        setPages(initialPages)
-      } else if (template?.pages) {
-        // Edit mode: Read layout_slug directly from pages
-        const initialPages = template.pages.map((p) => ({
-          page_number: p.page_number,
-          layout_slug: p.layout_slug || "blank", // Use stored layout_slug or default to blank
-          title: p.title || undefined,
-          id: p.id,
-        }))
-
-        setPages(initialPages)
-      }
+    if (layouts.length > 0 && !isEdit && layoutIds.length === 0) {
+      const defaultId = layouts.find((l) => l.is_active)?.id || layouts[0]?.id || ""
+      setLayoutIds(Array(pageCount).fill(defaultId))
     }
-  }, [layouts, isEdit, pages.length, pageCount, template])
+  }, [layouts, isEdit, layoutIds.length, pageCount])
 
-  // Update pages when page count changes
-  const handlePageCountChange = (newCount: 30 | 40) => {
+  // Update layoutIds array when page count changes
+  const handlePageCountChange = (newCount: PageCount) => {
     setPageCount(newCount)
-
-    // Get the current default layout for new pages
-    const defaultLayout = layouts.find((l) => l.is_active) || layouts[0]
-    const defaultSlug = defaultLayout?.slug || "blank"
-
-    if (newCount > pages.length) {
-      // Add more pages
-      const newPages = [...pages]
-      for (let i = pages.length + 1; i <= newCount; i++) {
-        newPages.push({
-          page_number: i,
-          layout_slug: defaultSlug,
-        })
-      }
-      setPages(newPages)
-    } else if (newCount < pages.length) {
-      // Remove extra pages
-      setPages(pages.slice(0, newCount))
+    const defaultId = layouts.find((l) => l.is_active)?.id || layouts[0]?.id || ""
+    if (newCount > layoutIds.length) {
+      setLayoutIds([...layoutIds, ...Array(newCount - layoutIds.length).fill(defaultId)])
+    } else {
+      setLayoutIds(layoutIds.slice(0, newCount))
     }
   }
 
@@ -113,7 +71,6 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
 
     try {
       if (isEdit && template) {
-        // Update template metadata
         await updateTemplate(template.id, {
           title,
           description: description || undefined,
@@ -121,18 +78,8 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
           thumbnail_url: thumbnailUrl || undefined,
           is_featured: isFeatured,
           is_active: isActive,
+          layout_ids: layoutIds,
         })
-
-        // Update layouts for changed pages
-        if (changedPageLayouts.size > 0) {
-          const updatePromises = Array.from(changedPageLayouts.entries()).map(
-            ([pageId, layoutSlug]) => updateTemplatePage(pageId, layoutSlug)
-          )
-          await Promise.all(updatePromises)
-        }
-
-        router.push("/admin/templates")
-        router.refresh()
       } else {
         await createTemplate({
           slug,
@@ -141,12 +88,13 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
           category_id: categoryId || undefined,
           thumbnail_url: thumbnailUrl || undefined,
           page_count: pageCount,
-          paper_size: "A4",
-          pages,
+          paper_size: paperSize,
+          layout_ids: layoutIds,
+          is_featured: isFeatured,
         })
-        router.push("/admin/templates")
-        router.refresh()
       }
+      router.push("/admin/templates")
+      router.refresh()
     } catch (err) {
       console.error("Failed to save template:", err)
       setError(err instanceof Error ? err.message : "Failed to save template")
@@ -163,24 +111,6 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
     setSlug(generatedSlug)
   }
 
-  // Handle page changes and track layout changes in edit mode
-  const handlePagesChange = (newPages: PageInput[]) => {
-    if (isEdit) {
-      // Track which pages had their layout changed
-      const newChangedLayouts = new Map(changedPageLayouts)
-
-      newPages.forEach((newPage, index) => {
-        const oldPage = pages[index]
-        if (oldPage && newPage.id && oldPage.layout_slug !== newPage.layout_slug) {
-          newChangedLayouts.set(newPage.id, newPage.layout_slug)
-        }
-      })
-
-      setChangedPageLayouts(newChangedLayouts)
-    }
-    setPages(newPages)
-  }
-
   return (
     <form onSubmit={handleSubmit}>
       <div className="flex items-center gap-4 mb-8">
@@ -193,16 +123,13 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
         </Link>
         <h1
           className="text-2xl font-bold flex-1"
-          style={{
-            fontFamily: "var(--font-serif)",
-            color: "var(--color-neutral)",
-          }}
+          style={{ fontFamily: "var(--font-serif)", color: "var(--color-neutral)" }}
         >
           {isEdit ? "Edit Template" : "Create Template"}
         </h1>
         <button
           type="submit"
-          disabled={isSubmitting || !title || (!isEdit && !slug)}
+          disabled={isSubmitting || !title || (!isEdit && !slug) || layoutIds.length === 0}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           style={{ backgroundColor: "var(--color-accent)" }}
         >
@@ -232,27 +159,18 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
         {/* Form Fields */}
         <div
           className="p-6 rounded-lg border"
-          style={{
-            backgroundColor: "var(--color-white)",
-            borderColor: "var(--color-border)",
-          }}
+          style={{ backgroundColor: "var(--color-white)", borderColor: "var(--color-border)" }}
         >
           <h2
             className="text-lg font-semibold mb-4"
-            style={{
-              fontFamily: "var(--font-serif)",
-              color: "var(--color-neutral)",
-            }}
+            style={{ fontFamily: "var(--font-serif)", color: "var(--color-neutral)" }}
           >
             Template Details
           </h2>
 
           <div className="space-y-4">
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "var(--color-neutral)" }}
-              >
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-neutral)" }}>
                 Title *
               </label>
               <input
@@ -268,10 +186,7 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
             </div>
 
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "var(--color-neutral)" }}
-              >
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-neutral)" }}>
                 Slug *
               </label>
               <div className="flex gap-2">
@@ -299,10 +214,7 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
             </div>
 
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "var(--color-neutral)" }}
-              >
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-neutral)" }}>
                 Category
               </label>
               <select
@@ -321,10 +233,7 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
             </div>
 
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "var(--color-neutral)" }}
-              >
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-neutral)" }}>
                 Description
               </label>
               <textarea
@@ -338,10 +247,7 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
             </div>
 
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "var(--color-neutral)" }}
-              >
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-neutral)" }}>
                 Thumbnail URL
               </label>
               <input
@@ -358,15 +264,12 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
             </div>
 
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "var(--color-neutral)" }}
-              >
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-neutral)" }}>
                 Page Count *
               </label>
               <select
                 value={pageCount}
-                onChange={(e) => handlePageCountChange(Number(e.target.value) as 30 | 40)}
+                onChange={(e) => handlePageCountChange(Number(e.target.value) as PageCount)}
                 disabled={isEdit}
                 className="w-full px-4 py-2 rounded-lg border disabled:opacity-50"
                 style={{ borderColor: "var(--color-border)" }}
@@ -377,6 +280,28 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
               {isEdit && (
                 <p className="text-xs mt-1" style={{ color: "var(--color-secondary)" }}>
                   Page count cannot be changed in edit mode
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-neutral)" }}>
+                Paper Size *
+              </label>
+              <select
+                value={paperSize}
+                onChange={(e) => setPaperSize(e.target.value as PaperSize)}
+                disabled={isEdit}
+                className="w-full px-4 py-2 rounded-lg border disabled:opacity-50"
+                style={{ borderColor: "var(--color-border)" }}
+              >
+                <option value="A4">A4</option>
+                <option value="A5">A5</option>
+                <option value="PDF Only">PDF Only</option>
+              </select>
+              {isEdit && (
+                <p className="text-xs mt-1" style={{ color: "var(--color-secondary)" }}>
+                  Paper size cannot be changed in edit mode
                 </p>
               )}
             </div>
@@ -411,32 +336,28 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
         {/* Page Builder */}
         <div
           className="lg:col-span-2 p-6 rounded-lg border"
-          style={{
-            backgroundColor: "var(--color-white)",
-            borderColor: "var(--color-border)",
-          }}
+          style={{ backgroundColor: "var(--color-white)", borderColor: "var(--color-border)" }}
         >
           <h2
             className="text-lg font-semibold mb-4"
-            style={{
-              fontFamily: "var(--font-serif)",
-              color: "var(--color-neutral)",
-            }}
+            style={{ fontFamily: "var(--font-serif)", color: "var(--color-neutral)" }}
           >
-            Pages ({pages.length})
+            Layout Sequence ({layoutIds.length} pages)
           </h2>
-          <PageBuilder
-            pages={pages}
-            layouts={layouts}
-            onChange={handlePagesChange}
-            disabled={false}
-            allowManualPageManagement={!isEdit}
-            allowLayoutChange={true}
-          />
-          {isEdit && (
-            <p className="text-sm mt-4" style={{ color: "var(--color-secondary)" }}>
-              You can change the layout for any page. Zones will be updated when you save. Page count cannot be changed.
-            </p>
+          {layouts.length > 0 && layoutIds.length > 0 ? (
+            <PageBuilder
+              pageCount={pageCount}
+              layoutIds={layoutIds}
+              layouts={layouts}
+              onChange={setLayoutIds}
+            />
+          ) : (
+            <div className="flex items-center justify-center py-12">
+              <Loader2
+                className="w-6 h-6 animate-spin"
+                style={{ color: "var(--color-secondary)" }}
+              />
+            </div>
           )}
         </div>
       </div>
