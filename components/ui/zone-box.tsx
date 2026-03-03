@@ -2,9 +2,11 @@
 
 import { useCallback } from "react"
 import { useDroppable } from "@dnd-kit/core"
-import { Image, Type } from "lucide-react"
+import { Image, Type, Trash2 } from "lucide-react"
 import { useZoneInteraction } from "@/lib/hooks/use-zone-interaction"
-import type { PageZone, Element } from "@/types/editor"
+import { PhotoToolbar } from "@/components/editor/ui/photo-toolbar"
+import { TextToolbar } from "@/components/editor/ui/text-toolbar"
+import type { PageZone, Element, UpdateElementInput } from "@/types/editor"
 
 type ZoneType = "photo" | "text"
 
@@ -32,6 +34,8 @@ interface ZoneBoxProps {
   // Editor mode props
   pageId?: string
   elements?: Element[]
+  onElementDelete?: (elementId: string) => void
+  onElementUpdate?: (elementId: string, updates: UpdateElementInput) => void
 }
 
 export function ZoneBox({
@@ -46,6 +50,8 @@ export function ZoneBox({
   index,
   pageId,
   elements = [],
+  onElementDelete,
+  onElementUpdate,
 }: ZoneBoxProps) {
   const isAdmin = mode === "admin"
   const isEmpty = elements.length === 0
@@ -144,6 +150,38 @@ export function ZoneBox({
           {isPhoto ? <Image className="w-3 h-3" /> : <Type className="w-3 h-3" />}
           {isAdmin && typeof index === "number" ? index + 1 : (zone.zone_index ?? 0) + 1}
         </span>
+      )}
+
+      {/* Toolbars — editor mode only, shown when zone is selected */}
+      {!isAdmin && isSelected && (
+        <>
+          {isPhoto && (
+            <PhotoToolbar
+              actions={
+                elements.length > 0 && onElementDelete
+                  ? [
+                      {
+                        icon: <Trash2 className="w-4 h-4" />,
+                        title: "Delete photo",
+                        variant: "danger",
+                        onClick: (e) => {
+                          e.stopPropagation()
+                          onElementDelete(elements[0].id)
+                        },
+                      },
+                    ]
+                  : []
+              }
+            />
+          )}
+          {!isPhoto && elements.length > 0 && onElementUpdate && onElementDelete && (
+            <TextToolbar
+              element={elements[0]}
+              onUpdate={(updates) => onElementUpdate(elements[0].id, updates)}
+              onDelete={() => onElementDelete(elements[0].id)}
+            />
+          )}
+        </>
       )}
 
       {/* Resize handles */}

@@ -81,25 +81,42 @@ function EditorContent() {
         return
       }
 
-      // Dropping on a zone - create new photo element in that zone
+      // Dropping on a zone - upsert photo element (1:1 zone-element constraint)
       if (dropTarget?.type === "zone") {
         const zone = dropTarget.zone
 
         if (!zone) return
 
-        // Create new photo element filling the zone (1:1 zone-element relationship)
-        await addElementToCanvas(zone.id, {
-          type: "photo",
-          zone_id: zone.id,
-          photo_url: photo.url,
-          photo_storage_path: photo.path,
-          // Fill the zone initially (100% of zone size)
-          position_x: 0,
-          position_y: 0,
-          width: 100,
-          height: 100,
-          rotation: 0,
-        })
+        const existingElements = state.elements[zone.id] || []
+        if (existingElements.length > 0) {
+          // Zone already has an element — update its photo
+          const existingElement = existingElements[0]
+          await updateElement(existingElement.id, {
+            photo_url: photo.url,
+            photo_storage_path: photo.path,
+          })
+          dispatch({
+            type: "UPDATE_ELEMENT",
+            payload: {
+              zoneId: zone.id,
+              elementId: existingElement.id,
+              updates: { photo_url: photo.url, photo_storage_path: photo.path },
+            },
+          })
+        } else {
+          // Zone is empty — create a new element filling the zone
+          await addElementToCanvas(zone.id, {
+            type: "photo",
+            zone_id: zone.id,
+            photo_url: photo.url,
+            photo_storage_path: photo.path,
+            position_x: 0,
+            position_y: 0,
+            width: 100,
+            height: 100,
+            rotation: 0,
+          })
+        }
         return
       }
     }

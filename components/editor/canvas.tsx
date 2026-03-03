@@ -16,6 +16,8 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
     updateZonePosition,
     setDraggingZone,
     addZoneToPage,
+    deleteElementFromCanvas,
+    updateElementPosition,
   } = useEditor()
 
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -144,6 +146,8 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
                 onSelect={() => selectZone(zone.id)}
                 onDragStart={() => setDraggingZone(true)}
                 onDragEnd={() => setDraggingZone(false)}
+                onElementDelete={deleteElementFromCanvas}
+                onElementUpdate={updateElementPosition}
               />
             )
           })}
