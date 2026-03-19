@@ -5,19 +5,15 @@ import { revalidatePath } from "next/cache"
 import type {
   Project,
   Page,
-  PageZone,
   Element,
   CreateProjectInput,
   UpdateProjectInput,
   CreatePageInput,
   UpdatePageInput,
-  CreateZoneInput,
-  UpdateZoneInput,
   CreateElementInput,
   UpdateElementInput,
 } from "@/types/editor"
 import { applyVoucherToProject, revertVoucher } from "@/lib/voucher-actions"
-import { createZone as createZoneUtil, updateZone as updateZoneUtil } from "@/lib/zone-operations"
 
 // ============================================
 // PROJECT ACTIONS
@@ -390,58 +386,6 @@ export async function reorderPages(
 
   revalidatePath(`/editor/${projectId}`)
 }
-
-// ============================================
-// ZONE ACTIONS
-// ============================================
-
-export async function createZone(input: CreateZoneInput): Promise<PageZone> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    throw new Error("Unauthorized")
-  }
-
-  // Delegate to shared utility (handles validation)
-  return createZoneUtil(input) as Promise<PageZone>
-}
-
-export async function updateZone(
-  zoneId: string,
-  updates: UpdateZoneInput
-): Promise<void> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    throw new Error("Unauthorized")
-  }
-
-  // Delegate to shared utility (handles validation)
-  await updateZoneUtil(zoneId, updates)
-}
-
-export async function deleteZone(zoneId: string): Promise<void> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    throw new Error("Unauthorized")
-  }
-
-  // Delete zone from unified zones table
-  const { error } = await supabase.from("zones").delete().eq("id", zoneId)
-
-  if (error) throw error
-}
-
 
 // ============================================
 // ELEMENT ACTIONS

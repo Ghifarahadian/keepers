@@ -1,9 +1,11 @@
 "use client"
 
-import { useCallback } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { useDroppable } from "@dnd-kit/core"
-import { Image, Type, Trash2 } from "lucide-react"
+import { Image, ImageMinus, Move, Type, Trash2, ZoomIn, ZoomOut } from "lucide-react"
 import { useZoneInteraction } from "@/lib/hooks/use-zone-interaction"
+import { useElementInteraction } from "@/lib/hooks/use-element-interaction"
 import { PhotoToolbar } from "@/components/editor/ui/photo-toolbar"
 import { TextToolbar } from "@/components/editor/ui/text-toolbar"
 import type { PageZone, Element, UpdateElementInput } from "@/types/editor"
@@ -36,6 +38,7 @@ interface ZoneBoxProps {
   elements?: Element[]
   onElementDelete?: (elementId: string) => void
   onElementUpdate?: (elementId: string, updates: UpdateElementInput) => void
+  onZoneDelete?: () => void
 }
 
 export function ZoneBox({
@@ -52,10 +55,14 @@ export function ZoneBox({
   elements = [],
   onElementDelete,
   onElementUpdate,
+  onZoneDelete,
 }: ZoneBoxProps) {
   const isAdmin = mode === "admin"
   const isEmpty = elements.length === 0
   const isPhoto = zone.zone_type === "photo"
+  const [mounted, setMounted] = useState(false)
+  const [toolbarPosition, setToolbarPosition] = useState({ top: 0, left: 0 })
+  const [isPanMode, setIsPanMode] = useState(false)
 
   // Setup droppable for editor mode
   const { setNodeRef } = useDroppable({
@@ -78,6 +85,75 @@ export function ZoneBox({
     canResize: isSelected,
   })
 
+  // Element interaction (for image panning)
+  const photoElement = isPhoto && elements.length > 0 ? elements[0] : null
+  const { handleDragStart: handleElementDragStart, elementRef: elementImageRef } = useElementInteraction({
+    element: photoElement || { position_x: 0, position_y: 0 } as any,
+    zoneRef: elementRef,
+    onUpdate: (updates) => {
+      if (photoElement && onElementUpdate) {
+        onElementUpdate(photoElement.id, updates)
+      }
+    },
+    enabled: isPanMode && !!photoElement,
+  })
+
+  // Handle client-side mounting for portal
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Calculate toolbar position when selected, zone moves, or window scrolls
+  useEffect(() => {
+    if (!isSelected || !elementRef.current) return
+
+    const updatePosition = () => {
+      if (!elementRef.current) return
+      const rect = elementRef.current.getBoundingClientRect()
+      setToolbarPosition({
+        top: rect.top - 10, // 10px above the zone
+        left: rect.left + rect.width / 2, // Centered horizontally
+      })
+    }
+
+    updatePosition()
+
+    window.addEventListener('scroll', updatePosition, true)
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('mousemove', updatePosition)
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true)
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('mousemove', updatePosition)
+    }
+  }, [isSelected, zone.position_x, zone.position_y, zone.width, zone.height])
+
+  // Auto-reset pan mode when zone is deselected
+  useEffect(() => {
+    if (!isSelected) {
+      setIsPanMode(false)
+    }
+  }, [isSelected])
+
+  // Auto-reset pan mode when photo is removed
+  useEffect(() => {
+    if (isPanMode && elements.length === 0) {
+      setIsPanMode(false)
+    }
+  }, [isPanMode, elements.length])
+
+  const handleZoomIn = () => {
+    if (photoElement && onElementUpdate) {
+      onElementUpdate(photoElement.id, { width: Math.min(300, (photoElement.width || 100) + 10) })
+    }
+  }
+  const handleZoomOut = () => {
+    if (photoElement && onElementUpdate) {
+      onElementUpdate(photoElement.id, { width: Math.max(50, (photoElement.width || 100) - 10) })
+    }
+  }
+
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
@@ -88,11 +164,13 @@ export function ZoneBox({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      // Don't drag zone if in pan mode
+      if (isPanMode) return
       // Only allow dragging if empty or selected
       if (!isEmpty && !isSelected) return
       handleDrag(e)
     },
-    [isEmpty, isSelected, handleDrag]
+    [isPanMode, isEmpty, isSelected, handleDrag]
   )
 
   // Unified styling based on zone type (same for both admin and editor)
@@ -130,7 +208,7 @@ export function ZoneBox({
         height: `${roundedHeight}%`,
         border: `2px ${borderStyle} ${borderColor}`,
         backgroundColor: bgColor,
-        cursor: isEmpty || isSelected ? "move" : "default",
+        cursor: isPanMode ? "default" : (isEmpty || isSelected ? "move" : "default"),
         overflow: "hidden",
         pointerEvents: "auto",
         boxSizing: "border-box", // ← Include border in width/height
@@ -152,36 +230,132 @@ export function ZoneBox({
         </span>
       )}
 
-      {/* Toolbars — editor mode only, shown when zone is selected */}
-      {!isAdmin && isSelected && (
-        <>
-          {isPhoto && (
+      {/* Empty photo zone prompt */}
+      {!isAdmin && isEmpty && isPhoto && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <p
+            className="text-sm"
+            style={{
+              color: 'var(--color-accent)',
+              fontFamily: 'var(--font-serif)',
+              opacity: 0.6,
+            }}
+          >
+            drag photo here
+          </p>
+        </div>
+      )}
+
+      {/* Render toolbar via Portal (outside zone DOM hierarchy) */}
+      {mounted && !isAdmin && isSelected && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: `${toolbarPosition.top}px`,
+            left: `${toolbarPosition.left}px`,
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+          }}
+        >
+          {isPhoto ? (
             <PhotoToolbar
               actions={
-                elements.length > 0 && onElementDelete
+                isEmpty
+                  ? onZoneDelete
+                    ? [
+                        {
+                          icon: <Trash2 className="w-4 h-4" />,
+                          title: "Delete zone",
+                          variant: "danger",
+                          onClick: (e) => {
+                            e.stopPropagation()
+                            onZoneDelete()
+                          },
+                        },
+                      ]
+                    : []
+                  : elements.length > 0 && onElementDelete && onZoneDelete
                   ? [
                       {
-                        icon: <Trash2 className="w-4 h-4" />,
-                        title: "Delete photo",
-                        variant: "danger",
+                        icon: <Move className="w-4 h-4" />,
+                        title: isPanMode ? "Move zone (click to switch)" : "Move photo (click to switch)",
+                        variant: "default",
+                        onClick: (e) => {
+                          e.stopPropagation()
+                          setIsPanMode(!isPanMode)
+                        },
+                        isActive: isPanMode,
+                      },
+                      {
+                        icon: <ZoomIn className="w-4 h-4" />,
+                        title: "Zoom in",
+                        variant: "default",
+                        onClick: (e) => {
+                          e.stopPropagation()
+                          handleZoomIn()
+                        },
+                      },
+                      {
+                        icon: <ZoomOut className="w-4 h-4" />,
+                        title: "Zoom out",
+                        variant: "default",
+                        onClick: (e) => {
+                          e.stopPropagation()
+                          handleZoomOut()
+                        },
+                      },
+                      {
+                        icon: <ImageMinus className="w-4 h-4" />,
+                        title: "Remove photo",
+                        variant: "default",
                         onClick: (e) => {
                           e.stopPropagation()
                           onElementDelete(elements[0].id)
+                        },
+                      },
+                      {
+                        icon: <Trash2 className="w-4 h-4" />,
+                        title: "Delete zone",
+                        variant: "danger",
+                        onClick: (e) => {
+                          e.stopPropagation()
+                          onZoneDelete()
                         },
                       },
                     ]
                   : []
               }
             />
+          ) : (
+            <>
+              {isEmpty ? (
+                <PhotoToolbar
+                  actions={[
+                    {
+                      icon: <Type className="w-4 h-4" />,
+                      title: "Add text",
+                      variant: "default",
+                      onClick: (e) => {
+                        e.stopPropagation()
+                      },
+                    },
+                  ]}
+                />
+              ) : (
+                elements.length > 0 &&
+                onElementUpdate &&
+                onElementDelete && (
+                  <TextToolbar
+                    element={elements[0]}
+                    onUpdate={(updates) => onElementUpdate(elements[0].id, updates)}
+                    onDelete={() => onElementDelete(elements[0].id)}
+                  />
+                )
+              )}
+            </>
           )}
-          {!isPhoto && elements.length > 0 && onElementUpdate && onElementDelete && (
-            <TextToolbar
-              element={elements[0]}
-              onUpdate={(updates) => onElementUpdate(elements[0].id, updates)}
-              onDelete={() => onElementDelete(elements[0].id)}
-            />
-          )}
-        </>
+        </div>,
+        document.body
       )}
 
       {/* Resize handles */}
@@ -276,9 +450,19 @@ export function ZoneBox({
             return (
               <img
                 key={element.id}
+                ref={elementImageRef}
                 src={element.photo_url}
                 alt=""
-                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                className="absolute inset-0 w-full h-full"
+                onMouseDown={isPanMode ? handleElementDragStart : undefined}
+                style={{
+                  objectFit: 'cover',
+                  objectPosition: `${element.position_x}% ${element.position_y}%`,
+                  transform: `scale(${(element.width || 100) / 100})`,
+                  transformOrigin: `${element.position_x}% ${element.position_y}%`,
+                  pointerEvents: isPanMode ? 'auto' : 'none',
+                  cursor: isPanMode ? 'grab' : 'default',
+                }}
               />
             )
           }

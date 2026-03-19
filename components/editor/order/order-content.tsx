@@ -19,7 +19,6 @@ export function OrderContent({ project, userProfile }: OrderContentProps) {
       return
     }
     // TODO: Implement PDF download functionality
-    console.log("Download PDF for project:", project.id)
   }
 
   const isDraft = project.status === "draft"

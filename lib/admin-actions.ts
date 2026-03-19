@@ -664,11 +664,6 @@ export async function getAdminProjects() {
         first_name,
         last_name,
         email
-      ),
-      template:templates (
-        id,
-        slug,
-        title
       )
     `)
     .order("last_edited_at", { ascending: false })

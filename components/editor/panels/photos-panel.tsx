@@ -55,9 +55,6 @@ function DraggablePhoto({ photo, onDelete }: { photo: UploadedPhoto; onDelete: (
             console.error('[DraggablePhoto] Failed to load image:', photo.url)
             setImageError(true)
           }}
-          onLoad={() => {
-            console.log('[DraggablePhoto] Successfully loaded:', photo.filename, photo.url)
-          }}
         />
       )}
       {/* Delete button */}
@@ -86,9 +83,6 @@ export function PhotosPanel() {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Debug: log uploaded photos
-  console.log('[PhotosPanel] uploadedPhotos:', state.uploadedPhotos)
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return

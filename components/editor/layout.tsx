@@ -1,6 +1,6 @@
 "use client"
 
-import { DndContext, DragEndEvent, DragStartEvent, PointerSensor, useSensor, useSensors, DragOverlay } from "@dnd-kit/core"
+import { DndContext, DragEndEvent, DragStartEvent, PointerSensor, useSensor, useSensors, DragOverlay, pointerWithin } from "@dnd-kit/core"
 import { EditorProvider, useEditor } from "@/lib/contexts/editor-context"
 import { EditorTopBar } from "./top-bar"
 import { EditorPagebar } from "./pagebar"
@@ -42,6 +42,37 @@ function EditorContent() {
 
     if (data?.type === "photo") {
       setActiveDragItem({ type: "photo", photo: data.photo })
+    }
+  }
+
+  const upsertPhotoInZone = async (zoneId: string, photo: UploadedPhoto) => {
+    const existingElements = state.elements[zoneId] || []
+    if (existingElements.length > 0) {
+      const existingElement = existingElements[0]
+      await updateElement(existingElement.id, {
+        photo_url: photo.url,
+        photo_storage_path: photo.path,
+      })
+      dispatch({
+        type: "UPDATE_ELEMENT",
+        payload: {
+          zoneId,
+          elementId: existingElement.id,
+          updates: { photo_url: photo.url, photo_storage_path: photo.path },
+        },
+      })
+    } else {
+      await addElementToCanvas(zoneId, {
+        type: "photo",
+        zone_id: zoneId,
+        photo_url: photo.url,
+        photo_storage_path: photo.path,
+        position_x: 50,
+        position_y: 50,
+        width: 100,
+        height: 100,
+        rotation: 0,
+      })
     }
   }
 
@@ -87,35 +118,17 @@ function EditorContent() {
 
         if (!zone) return
 
-        const existingElements = state.elements[zone.id] || []
-        if (existingElements.length > 0) {
-          // Zone already has an element — update its photo
-          const existingElement = existingElements[0]
-          await updateElement(existingElement.id, {
-            photo_url: photo.url,
-            photo_storage_path: photo.path,
-          })
-          dispatch({
-            type: "UPDATE_ELEMENT",
-            payload: {
-              zoneId: zone.id,
-              elementId: existingElement.id,
-              updates: { photo_url: photo.url, photo_storage_path: photo.path },
-            },
-          })
-        } else {
-          // Zone is empty — create a new element filling the zone
-          await addElementToCanvas(zone.id, {
-            type: "photo",
-            zone_id: zone.id,
-            photo_url: photo.url,
-            photo_storage_path: photo.path,
-            position_x: 0,
-            position_y: 0,
-            width: 100,
-            height: 100,
-            rotation: 0,
-          })
+        await upsertPhotoInZone(zone.id, photo)
+        return
+      }
+
+      // Fallback: dropped on canvas (not directly on a zone) — find the first
+      // photo zone on that page so full-canvas zones still receive drops.
+      if (dropTarget?.pageId) {
+        const pageZones = state.zones[dropTarget.pageId] || []
+        const firstPhotoZone = pageZones.find(z => z.zone_type === "photo")
+        if (firstPhotoZone) {
+          await upsertPhotoInZone(firstPhotoZone.id, photo)
         }
         return
       }
@@ -124,7 +137,7 @@ function EditorContent() {
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="min-h-screen" style={{ backgroundColor: 'var(--color-primary-bg-light)' }}>
         <EditorTopBar />
         <div className="pt-16 pb-14">

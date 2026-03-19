@@ -1,8 +1,9 @@
 "use client"
 
 import React, { createContext, useContext, useReducer, useCallback } from "react"
-import type { Project, Page, PageZone, Element, EditorState, EditorAction, UploadedPhoto, UpdateElementInput, UpdateZoneInput, CreateZoneInput } from "@/types/editor"
-import { updateProject, updateElement, createElement, deleteElement, updateZone, createZone, deleteZone } from "@/lib/editor-actions"
+import type { Project, Page, PageZone, Element, EditorState, EditorAction, UploadedPhoto, UpdateElementInput, UpdateZoneInput, CreateZoneInput, Zone } from "@/types/editor"
+import { updateProject, updateElement, createElement, deleteElement } from "@/lib/editor-actions"
+import { createZone, updateZone, deleteZone, createZones, deleteZonesForParent } from "@/lib/zone-operations"
 
 // ---------------------------------------------------------------------------
 // Page / item mapping helpers
@@ -99,15 +100,18 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         pages: [...state.pages, action.payload],
         zones: { ...state.zones, [action.payload.id]: action.payload.zones || [] },
-        elements: { ...state.elements, [action.payload.id]: [] },
       }
 
     case "DELETE_PAGE": {
       const newPages = state.pages.filter((p) => p.id !== action.payload)
       const newZones = { ...state.zones }
       const newElements = { ...state.elements }
+      // Clean up elements for all zones on this page (elements are keyed by zoneId)
+      const deletedPageZones = newZones[action.payload] || []
+      deletedPageZones.forEach(zone => {
+        delete newElements[zone.id]
+      })
       delete newZones[action.payload]
-      delete newElements[action.payload]
       // Adjust item index if it would be out of bounds
       const maxItemIndex = Math.max(0, Math.floor(newPages.length / 2))
       const newSpreadIndex = Math.min(state.currentSpreadIndex, maxItemIndex)
@@ -278,6 +282,7 @@ interface EditorContextValue {
   deleteZoneFromPage: (zoneId: string) => Promise<void>
   setZoneDrawingType: (type: "photo" | "text" | null) => void
   setDraggingZone: (isDragging: boolean) => void
+  applyLayoutToPage: (pageId: string, layoutZones: Zone[]) => Promise<void>
 
   // Element actions
   addElementToCanvas: (zoneId: string, element: Omit<Element, "id" | "created_at" | "updated_at">) => Promise<void>
@@ -549,6 +554,45 @@ export function EditorProvider({
     dispatch({ type: "REMOVE_UPLOADED_PHOTO", payload: photoId })
   }, [])
 
+  // Apply layout to page (batch zone replacement)
+  const applyLayoutToPage = useCallback(async (pageId: string, layoutZones: Zone[]) => {
+    try {
+      // Clean up old zone elements from local state
+      const oldZones = state.zones[pageId] || []
+      const newElements = { ...state.elements }
+      oldZones.forEach(zone => {
+        delete newElements[zone.id]
+      })
+
+      // Batch-delete existing zones from database
+      await deleteZonesForParent('page', pageId)
+
+      // Batch-create new zones from layout (preserving zone_type)
+      const newZones = await createZones({
+        parentType: 'page',
+        parentId: pageId,
+        zones: layoutZones.map((zone, index) => ({
+          zone_index: zone.zone_index ?? index,
+          zone_type: zone.zone_type,
+          position_x: zone.position_x,
+          position_y: zone.position_y,
+          width: zone.width,
+          height: zone.height,
+        }))
+      })
+
+      // Update state atomically
+      dispatch({ type: "SET_ZONES", payload: { pageId, zones: newZones } })
+
+      // Clear selections
+      dispatch({ type: "SELECT_ZONE", payload: null })
+      dispatch({ type: "SELECT_ELEMENT", payload: null })
+    } catch (error) {
+      console.error("Apply layout error:", error)
+      dispatch({ type: "SET_ERROR", payload: "Failed to apply layout" })
+    }
+  }, [state.zones, state.elements])
+
   const value: EditorContextValue = {
     state,
     dispatch,
@@ -564,6 +608,7 @@ export function EditorProvider({
     deleteZoneFromPage,
     setZoneDrawingType,
     setDraggingZone,
+    applyLayoutToPage,
     addElementToCanvas,
     updateElementLocal,
     updateElementPosition,

@@ -18,6 +18,7 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
     addZoneToPage,
     deleteElementFromCanvas,
     updateElementPosition,
+    deleteZoneFromPage,
   } = useEditor()
 
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -123,7 +124,7 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
         outline: isActive ? '2px solid var(--color-accent)' : 'none',
         outlineOffset: '-2px',
         boxSizing: 'border-box',
-        overflow: 'hidden',
+        overflow: 'visible', // Changed from 'hidden' to allow toolbars to show above zones
         cursor: drawingType ? 'crosshair' : 'default',
         userSelect: 'none',
       }}
@@ -132,7 +133,9 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
         <>
           {/* Zones */}
           {zones.map((zone) => {
+            // Get elements for this zone (elements are keyed by zone.id)
             const zoneElements = state.elements[zone.id] || []
+
             return (
               <ZoneBox
                 key={zone.id}
@@ -143,11 +146,15 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
                 isSelected={state.selectedZoneId === zone.id}
                 canvasRef={canvasRef}
                 onUpdate={(updates) => updateZonePosition(zone.id, updates)}
-                onSelect={() => selectZone(zone.id)}
+                onSelect={() => {
+                  setActivePageSide(side)
+                  selectZone(zone.id)
+                }}
                 onDragStart={() => setDraggingZone(true)}
                 onDragEnd={() => setDraggingZone(false)}
                 onElementDelete={deleteElementFromCanvas}
                 onElementUpdate={updateElementPosition}
+                onZoneDelete={() => deleteZoneFromPage(zone.id)}
               />
             )
           })}

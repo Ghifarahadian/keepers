@@ -3,12 +3,11 @@
 import { useEffect, useState } from "react"
 import { useEditor } from "@/lib/contexts/editor-context"
 import type { Layout } from "@/types/editor"
-import { deleteElement, createZone, deleteZone } from "@/lib/editor-actions"
 import { getLayouts } from "@/lib/layout-actions"
 import { Check, Loader2, AlertCircle } from "lucide-react"
 
 export function LayoutsPanel() {
-  const { state, dispatch, getActivePage } = useEditor()
+  const { state, getActivePage, applyLayoutToPage } = useEditor()
   const [layouts, setLayouts] = useState<Layout[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -65,43 +64,8 @@ export function LayoutsPanel() {
       const layout = layouts.find(l => l.id === layoutId)
       if (!layout) return
 
-      // Delete all existing zones (this will cascade delete elements due to FK constraint)
-      const existingZones = state.zones[currentPage.id] || []
-      for (const zone of existingZones) {
-        // Delete elements in this zone from local state
-        const zoneElements = state.elements[zone.id] || []
-        for (const element of zoneElements) {
-          dispatch({ type: "DELETE_ELEMENT", payload: { zoneId: zone.id, elementId: element.id } })
-        }
-        // Delete zone from database (will cascade delete elements)
-        await deleteZone(zone.id)
-      }
-
-      // Copy zones from layout to page
-      const newZones = []
-      for (let i = 0; i < layout.zones.length; i++) {
-        const layoutZone = layout.zones[i]
-        const zone = await createZone({
-          page_id: currentPage.id,
-          zone_index: i,
-          position_x: layoutZone.position_x,
-          position_y: layoutZone.position_y,
-          width: layoutZone.width,
-          height: layoutZone.height,
-        })
-        newZones.push(zone)
-        // Initialize empty elements array for new zone
-        dispatch({
-          type: "SET_ELEMENTS",
-          payload: { zoneId: zone.id, elements: [] },
-        })
-      }
-
-      // Update zones in state
-      dispatch({
-        type: "SET_ZONES",
-        payload: { pageId: currentPage.id, zones: newZones },
-      })
+      // Apply layout to page using context method
+      await applyLayoutToPage(currentPage.id, layout.zones)
     } catch (error) {
       console.error("Failed to update layout:", error)
     }

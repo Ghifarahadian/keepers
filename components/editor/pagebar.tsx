@@ -3,19 +3,21 @@
 import React, { memo, useMemo } from "react"
 import { useEditor, getItemPages } from "@/lib/contexts/editor-context"
 import { deletePage } from "@/lib/editor-actions"
-import type { Page, Element } from "@/types/editor"
+import type { Page, Zone, Element } from "@/types/editor"
 
 interface PageThumbnailProps {
   page: Page | null
-  elements: Element[]
+  zones: Zone[]
+  elements: Record<string, Element[]>
   uploadedPhotos: { path: string; url: string }[]
   isDragging: boolean
 }
 
-// Mini preview component for page thumbnails - renders elements directly
+// Mini preview component for page thumbnails - renders zones with elements inside
 // Memoized to prevent re-renders during element dragging
 const PageThumbnail = memo(function PageThumbnail({
   page,
+  zones,
   elements,
   uploadedPhotos,
 }: PageThumbnailProps) {
@@ -29,61 +31,77 @@ const PageThumbnail = memo(function PageThumbnail({
     )
   }
 
+  const hasContent = zones.some(zone => (elements[zone.id] || []).length > 0)
+
   return (
     <div className="flex-1 relative overflow-hidden" style={{ backgroundColor: 'var(--color-white)', aspectRatio: '8.5 / 11' }}>
-      {elements.length === 0 ? (
+      {zones.length === 0 ? (
         <div className="w-full h-full flex items-center justify-center">
           <span className="text-[6px]" style={{ color: 'var(--color-secondary)' }}>Empty</span>
         </div>
       ) : (
-        elements.map((element) => (
-          <div
-            key={element.id}
-            className="absolute overflow-hidden"
-            style={{
-              left: `${element.position_x}%`,
-              top: `${element.position_y}%`,
-              width: `${element.width}%`,
-              height: `${element.height}%`,
-              border: '1px dashed rgba(0,0,0,0.1)',
-            }}
-          >
-            {element.type === 'photo' && (() => {
-              const photo = uploadedPhotos.find(p => p.path === element.photo_storage_path)
-              const photoUrl = photo?.url || element.photo_url || ""
-              if (!photoUrl) return null
-              return (
-                <img
-                  src={photoUrl}
-                  alt=""
-                  className="w-full h-full object-cover"
-                  draggable={false}
-                />
-              )
-            })()}
-            {element.type === 'text' && element.text_content && (() => {
-              const baseFontSize = element.font_size || 16
-              const scaledFontSize = Math.max(2, baseFontSize * 0.15)
-              return (
-                <div
-                  className="w-full h-full overflow-hidden p-0.5"
-                  style={{
-                    fontSize: `${scaledFontSize}px`,
-                    lineHeight: 1.2,
-                    fontFamily: element.font_family || 'var(--font-serif)',
-                    fontWeight: element.font_weight || 'normal',
-                    fontStyle: element.font_style || 'normal',
-                    textDecoration: element.text_decoration || 'none',
-                    textAlign: element.text_align || 'left',
-                    color: element.font_color || 'var(--color-neutral)',
-                  }}
-                >
-                  <span className="w-full">{element.text_content}</span>
-                </div>
-              )
-            })()}
-          </div>
-        ))
+        zones.map((zone) => {
+          const zoneElements = elements[zone.id] || []
+          return (
+            <div
+              key={zone.id}
+              className="absolute overflow-hidden"
+              style={{
+                left: `${zone.position_x}%`,
+                top: `${zone.position_y}%`,
+                width: `${zone.width}%`,
+                height: `${zone.height}%`,
+                border: hasContent ? 'none' : '1px dashed rgba(0,0,0,0.1)',
+              }}
+            >
+              {zoneElements.map((element) => {
+                if (element.type === 'photo') {
+                  const photo = uploadedPhotos.find(p => p.path === element.photo_storage_path)
+                  const photoUrl = photo?.url || element.photo_url || ""
+                  if (!photoUrl) return null
+                  return (
+                    <img
+                      key={element.id}
+                      src={photoUrl}
+                      alt=""
+                      className="absolute inset-0 w-full h-full"
+                      draggable={false}
+                      style={{
+                        objectFit: 'cover',
+                        objectPosition: `${element.position_x}% ${element.position_y}%`,
+                        transform: `scale(${(element.width || 100) / 100})`,
+                        transformOrigin: `${element.position_x}% ${element.position_y}%`,
+                      }}
+                    />
+                  )
+                }
+                if (element.type === 'text' && element.text_content) {
+                  const baseFontSize = element.font_size || 16
+                  const scaledFontSize = Math.max(2, baseFontSize * 0.15)
+                  return (
+                    <div
+                      key={element.id}
+                      className="absolute inset-0 flex items-center justify-center overflow-hidden p-0.5"
+                      style={{
+                        fontSize: `${scaledFontSize}px`,
+                        lineHeight: 1.2,
+                        fontFamily: element.font_family || 'var(--font-serif)',
+                        fontWeight: element.font_weight || 'normal',
+                        fontStyle: element.font_style || 'normal',
+                        textDecoration: element.text_decoration || 'none',
+                        textAlign: element.text_align || 'left',
+                        color: element.font_color || 'var(--color-neutral)',
+                      }}
+                    >
+                      <span className="w-full">{element.text_content}</span>
+                    </div>
+                  )
+                }
+                return null
+              })}
+            </div>
+          )
+        })
       )}
     </div>
   )
@@ -91,6 +109,7 @@ const PageThumbnail = memo(function PageThumbnail({
   if (nextProps.isDragging) return true
   return (
     prevProps.page?.id === nextProps.page?.id &&
+    prevProps.zones === nextProps.zones &&
     prevProps.elements === nextProps.elements &&
     prevProps.uploadedPhotos === nextProps.uploadedPhotos
   )
@@ -109,17 +128,11 @@ interface PageItem {
 export function EditorPagebar() {
   const { state, setCurrentSpread, dispatch } = useEditor()
 
-  // Helper: Get all elements for a page by aggregating from all zones
-  const getPageElements = useMemo(() => (page: Page | null): Element[] => {
+  // Helper: Get zones for a page
+  const getPageZones = useMemo(() => (page: Page | null): Zone[] => {
     if (!page) return []
-    const zones = state.zones[page.id] || []
-    const allElements: Element[] = []
-    zones.forEach(zone => {
-      const zoneElements = state.elements[zone.id] || []
-      allElements.push(...zoneElements)
-    })
-    return allElements
-  }, [state.zones, state.elements])
+    return state.zones[page.id] || []
+  }, [state.zones])
 
   // Build the ordered list of page items (front cover, inner spreads, back cover)
   const items = useMemo((): PageItem[] => {
@@ -223,7 +236,8 @@ export function EditorPagebar() {
                   <div style={{ width: '50%' }}>
                     <PageThumbnail
                       page={coverPage}
-                      elements={getPageElements(coverPage)}
+                      zones={getPageZones(coverPage)}
+                      elements={state.elements}
                       uploadedPhotos={state.uploadedPhotos}
                       isDragging={state.isDragging}
                     />
@@ -234,13 +248,15 @@ export function EditorPagebar() {
                 <div className="flex gap-0.5 p-1" style={{ backgroundColor: 'var(--color-primary-bg-light)' }}>
                   <PageThumbnail
                     page={item.leftPage}
-                    elements={getPageElements(item.leftPage)}
+                    zones={getPageZones(item.leftPage)}
+                    elements={state.elements}
                     uploadedPhotos={state.uploadedPhotos}
                     isDragging={state.isDragging}
                   />
                   <PageThumbnail
                     page={item.rightPage}
-                    elements={getPageElements(item.rightPage)}
+                    zones={getPageZones(item.rightPage)}
+                    elements={state.elements}
                     uploadedPhotos={state.uploadedPhotos}
                     isDragging={state.isDragging}
                   />

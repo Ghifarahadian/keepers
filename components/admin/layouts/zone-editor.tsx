@@ -3,20 +3,19 @@
 import { useState, useRef, useCallback } from "react"
 import { Trash2, Image, Type, X } from "lucide-react"
 import { ZoneBox } from "@/components/ui/zone-box"
+import type { ElementType } from "@/types/editor"
 
-export type ZoneType = "photo" | "text"
-
-export interface Zone {
+export interface ZoneDrawData {
   position_x: number
   position_y: number
   width: number
   height: number
-  zone_type: ZoneType
+  zone_type: ElementType
 }
 
 interface ZoneEditorProps {
-  zones: Zone[]
-  onChange: (zones: Zone[]) => void
+  zones: ZoneDrawData[]
+  onChange: (zones: ZoneDrawData[]) => void
 }
 
 export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
@@ -25,7 +24,7 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
   const [isDrawing, setIsDrawing] = useState(false)
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null)
   const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null)
-  const [newZoneType, setNewZoneType] = useState<ZoneType>("photo")
+  const [newZoneType, setNewZoneType] = useState<ElementType>("photo")
 
   const getMousePosition = useCallback((e: React.MouseEvent) => {
     if (!canvasRef.current) return { x: 0, y: 0 }
@@ -65,7 +64,7 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
       const height = Math.abs(pos.y - drawStart.y)
 
       if (width >= 5 && height >= 5) {
-        const newZone: Zone = {
+        const newZone: ZoneDrawData = {
           position_x: Math.round(x * 10) / 10,
           position_y: Math.round(y * 10) / 10,
           width: Math.round(width * 10) / 10,
@@ -87,13 +86,13 @@ export function ZoneEditor({ zones, onChange }: ZoneEditorProps) {
     setSelectedIndex(null)
   }
 
-  const updateZone = useCallback((index: number, updates: Partial<Zone>) => {
+  const updateZone = useCallback((index: number, updates: Partial<ZoneDrawData>) => {
     const newZones = [...zones]
     newZones[index] = { ...newZones[index], ...updates }
     onChange(newZones)
   }, [zones, onChange])
 
-  const updateZoneValue = (index: number, field: keyof Zone, value: number | ZoneType) => {
+  const updateZoneValue = (index: number, field: keyof ZoneDrawData, value: number | ElementType) => {
     const newZones = [...zones]
     newZones[index] = { ...newZones[index], [field]: value }
     onChange(newZones)

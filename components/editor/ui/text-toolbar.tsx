@@ -88,7 +88,7 @@ export function TextToolbar({ element, onUpdate, onDelete }: TextToolbarProps) {
   return (
     <div
       className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5 bg-white rounded-lg shadow-lg px-1 py-1 z-50"
-      style={{ bottom: 'calc(100% + 8px)' }}
+      style={{ bottom: 'calc(100% + 4px)' }}
       onClick={stopPropagation}
       onMouseDown={stopPropagation}
     >

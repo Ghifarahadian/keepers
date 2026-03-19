@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createLayout, updateLayout } from "@/lib/admin-actions"
 import type { LayoutDB, CreateLayoutInput, UpdateLayoutInput } from "@/types/template"
-import { ZoneEditor, type Zone as EditorZone } from "./zone-editor"
+import { ZoneEditor, type ZoneDrawData } from "./zone-editor"
 import { Loader2, Save, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
@@ -23,7 +23,7 @@ export function LayoutForm({ layout, isEdit }: LayoutFormProps) {
   const [description, setDescription] = useState(layout?.description || "")
   const [icon, setIcon] = useState(layout?.icon || "")
   const [isActive, setIsActive] = useState(layout?.is_active ?? true)
-  const [zones, setZones] = useState<EditorZone[]>(
+  const [zones, setZones] = useState<ZoneDrawData[]>(
     layout?.zones?.map((z) => ({
       position_x: z.position_x,
       position_y: z.position_y,
