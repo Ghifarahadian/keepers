@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useDroppable } from "@dnd-kit/core"
 import { Image, ImageMinus, Move, Type, Trash2, ZoomIn, ZoomOut } from "lucide-react"
@@ -36,6 +36,7 @@ interface ZoneBoxProps {
   // Editor mode props
   pageId?: string
   elements?: Element[]
+  onElementAdd?: (element: Omit<Element, "id" | "created_at" | "updated_at">) => Promise<void>
   onElementDelete?: (elementId: string) => void
   onElementUpdate?: (elementId: string, updates: UpdateElementInput) => void
   onZoneDelete?: () => void
@@ -53,6 +54,7 @@ export function ZoneBox({
   index,
   pageId,
   elements = [],
+  onElementAdd,
   onElementDelete,
   onElementUpdate,
   onZoneDelete,
@@ -63,6 +65,8 @@ export function ZoneBox({
   const [mounted, setMounted] = useState(false)
   const [toolbarPosition, setToolbarPosition] = useState({ top: 0, left: 0 })
   const [isPanMode, setIsPanMode] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const textRef = useRef<HTMLDivElement>(null)
 
   // Setup droppable for editor mode
   const { setNodeRef } = useDroppable({
@@ -129,12 +133,28 @@ export function ZoneBox({
     }
   }, [isSelected, zone.position_x, zone.position_y, zone.width, zone.height])
 
-  // Auto-reset pan mode when zone is deselected
+  // Auto-reset pan mode and editing when zone is deselected
   useEffect(() => {
     if (!isSelected) {
       setIsPanMode(false)
+      setIsEditing(false)
     }
   }, [isSelected])
+
+  // Auto-focus contentEditable when entering edit mode
+  useEffect(() => {
+    if (isEditing && textRef.current) {
+      textRef.current.focus()
+      const range = document.createRange()
+      const sel = window.getSelection()
+      if (sel) {
+        range.selectNodeContents(textRef.current)
+        range.collapse(false)
+        sel.removeAllRanges()
+        sel.addRange(range)
+      }
+    }
+  }, [isEditing])
 
   // Auto-reset pan mode when photo is removed
   useEffect(() => {
@@ -164,13 +184,13 @@ export function ZoneBox({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // Don't drag zone if in pan mode
-      if (isPanMode) return
+      // Don't drag zone if in pan mode or editing text
+      if (isPanMode || isEditing) return
       // Only allow dragging if empty or selected
       if (!isEmpty && !isSelected) return
       handleDrag(e)
     },
-    [isPanMode, isEmpty, isSelected, handleDrag]
+    [isPanMode, isEditing, isEmpty, isSelected, handleDrag]
   )
 
   // Unified styling based on zone type (same for both admin and editor)
@@ -335,8 +355,27 @@ export function ZoneBox({
                       icon: <Type className="w-4 h-4" />,
                       title: "Add text",
                       variant: "default",
-                      onClick: (e) => {
+                      onClick: async (e) => {
                         e.stopPropagation()
+                        if (!onElementAdd || !zone.id) return
+                        await onElementAdd({
+                          zone_id: zone.id as string,
+                          type: "text",
+                          text_content: "",
+                          font_family: "var(--font-serif)",
+                          font_size: 16,
+                          font_color: "#2D3748",
+                          font_weight: "normal",
+                          font_style: "normal",
+                          text_align: "center",
+                          text_decoration: "none",
+                          position_x: 0,
+                          position_y: 0,
+                          width: 100,
+                          height: 100,
+                          rotation: 0,
+                        })
+                        setIsEditing(true)
                       },
                     },
                   ]}
@@ -470,15 +509,52 @@ export function ZoneBox({
             return (
               <div
                 key={element.id}
-                className="absolute inset-0 flex items-center justify-center p-2 overflow-hidden pointer-events-none"
+                ref={textRef}
+                contentEditable={isEditing}
+                suppressContentEditableWarning
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  if (isSelected) {
+                    setIsEditing(true)
+                  }
+                }}
+                onBlur={(e) => {
+                  if (isEditing) {
+                    const relatedTarget = e.relatedTarget as HTMLElement | null
+                    if (relatedTarget?.closest('[data-text-toolbar]')) {
+                      setTimeout(() => textRef.current?.focus(), 0)
+                      return
+                    }
+                    const newText = e.currentTarget.textContent || ""
+                    setIsEditing(false)
+                    if (onElementUpdate && newText !== (element.text_content || "")) {
+                      onElementUpdate(element.id, { text_content: newText })
+                    }
+                  }
+                }}
+                onKeyDown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === "Escape") {
+                    e.currentTarget.blur()
+                  }
+                }}
+                className={`absolute inset-0 p-2 overflow-hidden outline-none ${
+                  isEditing ? "" : "pointer-events-none"
+                }`}
                 style={{
                   fontFamily: element.font_family || undefined,
                   fontSize: element.font_size ? `${element.font_size}px` : undefined,
                   color: element.font_color || "inherit",
                   fontWeight: element.font_weight || undefined,
                   fontStyle: element.font_style || undefined,
-                  textAlign: element.text_align || undefined,
+                  textAlign: (element.text_align as React.CSSProperties["textAlign"]) || undefined,
                   textDecoration: element.text_decoration !== "none" ? element.text_decoration || undefined : undefined,
+                  cursor: isEditing ? "text" : "default",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
                 {element.text_content}

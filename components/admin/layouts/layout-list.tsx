@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Edit, Trash2 } from "lucide-react"
 import type { LayoutDB } from "@/types/template"
 import type { Zone } from "@/types/editor"
+import { ZonePreview } from "@/components/ui/zone-preview"
 import { deleteLayout } from "@/lib/admin-actions"
 import { useState } from "react"
 
@@ -95,29 +96,7 @@ export function LayoutList({ layouts }: LayoutListProps) {
               style={{ borderColor: "var(--color-border)" }}
             >
               <td className="px-6 py-4">
-                {/* Layout Preview */}
-                <div
-                  className="w-16 h-20 border rounded relative overflow-hidden"
-                  style={{
-                    backgroundColor: "var(--color-white)",
-                    borderColor: "var(--color-border)",
-                  }}
-                >
-                  {layout.zones?.map((zone: Zone, index: number) => (
-                    <div
-                      key={index}
-                      className="absolute"
-                      style={{
-                        left: `${zone.position_x}%`,
-                        top: `${zone.position_y}%`,
-                        width: `${zone.width}%`,
-                        height: `${zone.height}%`,
-                        backgroundColor: zone.zone_type === "text" ? "var(--color-accent)" : "var(--color-secondary)",
-                        opacity: 0.6,
-                      }}
-                    />
-                  ))}
-                </div>
+                <ZonePreview zones={(layout.zones || []) as Zone[]} mode="display" width="w-16" height="h-20" />
               </td>
               <td className="px-6 py-4">
                 <p
