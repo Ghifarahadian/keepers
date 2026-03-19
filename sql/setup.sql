@@ -257,6 +257,7 @@ CREATE TABLE IF NOT EXISTS public.templates (
   page_count INT CHECK (page_count IN (30, 40)),
   paper_size VARCHAR(10) CHECK (paper_size IN ('A4', 'A5', 'PDF Only')),
   layout_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  page_colors JSONB NOT NULL DEFAULT '[]'::jsonb,
   thumbnail_url TEXT,
   preview_images JSONB,
   is_featured BOOLEAN DEFAULT FALSE,
@@ -305,6 +306,7 @@ CREATE TABLE IF NOT EXISTS public.pages (
   page_number INT NOT NULL,
   title VARCHAR(255),
   layout_slug VARCHAR(100), -- Reference to layout used (informational only, no FK)
+  page_color VARCHAR(7) DEFAULT '#FFFFFF', -- Background color in hex format (e.g., #FF6F61)
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(project_id, page_number)
@@ -314,6 +316,14 @@ ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
 
 CREATE INDEX IF NOT EXISTS idx_pages_project_id ON public.pages(project_id, page_number);
 CREATE INDEX IF NOT EXISTS idx_pages_layout_slug ON public.pages(layout_slug) WHERE layout_slug IS NOT NULL;
+
+-- Add constraint for valid hex color format
+ALTER TABLE public.pages
+DROP CONSTRAINT IF EXISTS page_color_format_check;
+
+ALTER TABLE public.pages
+ADD CONSTRAINT page_color_format_check
+CHECK (page_color ~ '^#[0-9A-Fa-f]{6}$');
 
 DROP POLICY IF EXISTS "Users can view own pages" ON public.pages;
 CREATE POLICY "Users can view own pages"

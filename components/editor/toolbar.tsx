@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Camera, LayoutGrid, Layers, Settings } from "lucide-react"
 import { PhotosPanel } from "./panels/photos-panel"
 import { LayoutsPanel } from "./panels/layouts-panel"
-import { ZonesPanel } from "./panels/zones-panel"
+import { PagesPanel } from "./panels/pages-panel"
 import { PropertiesPanel } from "./panels/properties-panel"
 
 type PanelType = "photos" | "layout" | "zones" | "properties" | null
@@ -15,7 +15,7 @@ export function EditorToolbar() {
   const tools = [
     { id: "photos" as const, icon: Camera, label: "Photos", enabled: true },
     { id: "layout" as const, icon: LayoutGrid, label: "Layout", enabled: true },
-    { id: "zones" as const, icon: Layers, label: "Zones", enabled: true },
+    { id: "zones" as const, icon: Layers, label: "Pages", enabled: true },
     { id: "properties" as const, icon: Settings, label: "Properties", enabled: true },
   ]
 
@@ -56,7 +56,7 @@ export function EditorToolbar() {
       <div className="flex-1 overflow-y-auto">
         {activePanel === "photos" && <PhotosPanel />}
         {activePanel === "layout" && <LayoutsPanel />}
-        {activePanel === "zones" && <ZonesPanel />}
+        {activePanel === "zones" && <PagesPanel />}
         {activePanel === "properties" && <PropertiesPanel />}
       </div>
     </aside>

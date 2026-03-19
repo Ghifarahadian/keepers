@@ -186,7 +186,7 @@ export async function createProjectFromTemplate(
   // Fetch template (no template_project join needed)
   const { data: template, error: templateError } = await supabase
     .from("templates")
-    .select("id, title, page_count, paper_size, layout_ids")
+    .select("id, title, page_count, paper_size, layout_ids, page_colors")
     .eq("id", templateId)
     .eq("is_active", true)
     .single()
@@ -196,6 +196,7 @@ export async function createProjectFromTemplate(
   }
 
   const layoutIds: string[] = template.layout_ids || []
+  const pageColors: string[] = template.page_colors || []
 
   if (!template.page_count || layoutIds.length !== template.page_count) {
     throw new Error("Template configuration is invalid")
@@ -238,12 +239,14 @@ export async function createProjectFromTemplate(
   for (let i = 0; i < layoutIds.length; i++) {
     const layoutId = layoutIds[i]
     const pageNumber = i + 1
+    const pageColor = pageColors[i] || '#FFFFFF'
 
     const { data: newPage, error: pageError } = await supabase
       .from("pages")
       .insert({
         project_id: project.id,
         page_number: pageNumber,
+        page_color: pageColor,
       })
       .select()
       .single()

@@ -47,6 +47,7 @@ export interface Page {
   page_number: number
   title?: string | null
   layout_slug?: string | null // Reference to layout used (informational only, no FK)
+  page_color?: string | null // Background color in hex format (e.g., #FF6F61)
   created_at: string
   updated_at: string
   zones?: Zone[]
@@ -170,6 +171,7 @@ export type EditorAction =
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'SET_DRAGGING'; payload: boolean }
   | { type: 'SET_DRAGGING_ZONE'; payload: boolean }
+  | { type: 'UPDATE_PAGE_COLOR'; payload: { pageId: string; color: string } }
   | { type: 'SET_ZONE_DRAWING_TYPE'; payload: "photo" | "text" | null }
 
 // ============================================
@@ -197,11 +199,13 @@ export interface CreatePageInput {
   page_number: number
   title?: string
   layout_slug?: string // Optional: which layout was used
+  page_color?: string // Optional: background color in hex format
 }
 
 export interface UpdatePageInput {
   title?: string
   layout_slug?: string // Optional: update which layout is being used
+  page_color?: string // Optional: background color in hex format
 }
 
 export interface CreateZoneInput {

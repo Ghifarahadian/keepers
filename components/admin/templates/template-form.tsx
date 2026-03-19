@@ -31,6 +31,7 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
   const [pageCount, setPageCount] = useState<PageCount>(template?.page_count || 30)
   const [paperSize, setPaperSize] = useState<PaperSize>(template?.paper_size || "A4")
   const [layoutIds, setLayoutIds] = useState<string[]>(template?.layout_ids || [])
+  const [pageColors, setPageColors] = useState<string[]>(template?.page_colors || [])
 
   // Load categories and layouts
   useEffect(() => {
@@ -45,22 +46,32 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
     loadData()
   }, [])
 
-  // Initialize layoutIds once layouts are loaded (new template only)
+  // Initialize layoutIds and pageColors once layouts are loaded (new template only)
   useEffect(() => {
     if (layouts.length > 0 && !isEdit && layoutIds.length === 0) {
       const defaultId = layouts.find((l) => l.is_active)?.id || layouts[0]?.id || ""
       setLayoutIds(Array(pageCount).fill(defaultId))
+      setPageColors(Array(pageCount).fill('#FFFFFF'))
     }
   }, [layouts, isEdit, layoutIds.length, pageCount])
 
-  // Update layoutIds array when page count changes
+  // Update layoutIds and pageColors arrays when page count changes
   const handlePageCountChange = (newCount: PageCount) => {
     setPageCount(newCount)
     const defaultId = layouts.find((l) => l.is_active)?.id || layouts[0]?.id || ""
+
+    // Update layoutIds
     if (newCount > layoutIds.length) {
       setLayoutIds([...layoutIds, ...Array(newCount - layoutIds.length).fill(defaultId)])
     } else {
       setLayoutIds(layoutIds.slice(0, newCount))
+    }
+
+    // Update pageColors
+    if (newCount > pageColors.length) {
+      setPageColors([...pageColors, ...Array(newCount - pageColors.length).fill('#FFFFFF')])
+    } else {
+      setPageColors(pageColors.slice(0, newCount))
     }
   }
 
@@ -79,6 +90,7 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
           is_featured: isFeatured,
           is_active: isActive,
           layout_ids: layoutIds,
+          page_colors: pageColors,
         })
       } else {
         await createTemplate({
@@ -90,6 +102,7 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
           page_count: pageCount,
           paper_size: paperSize,
           layout_ids: layoutIds,
+          page_colors: pageColors,
           is_featured: isFeatured,
         })
       }
@@ -348,8 +361,10 @@ export function TemplateForm({ template, isEdit }: TemplateFormProps) {
             <PageBuilder
               pageCount={pageCount}
               layoutIds={layoutIds}
+              pageColors={pageColors}
               layouts={layouts}
               onChange={setLayoutIds}
+              onColorsChange={setPageColors}
             />
           ) : (
             <div className="flex items-center justify-center py-12">

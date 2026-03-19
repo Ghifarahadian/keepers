@@ -120,7 +120,7 @@ function SpreadPage({ page, side }: { page: Page | null; side: 'left' | 'right' 
       className="relative flex-1"
       style={{
         aspectRatio: "8.5 / 11",
-        backgroundColor: 'var(--color-white)',
+        backgroundColor: page?.page_color || 'var(--color-white)',
         outline: isActive ? '2px solid var(--color-accent)' : 'none',
         outlineOffset: '-2px',
         boxSizing: 'border-box',

@@ -59,6 +59,7 @@ export interface Template {
   page_count: PageCount | null
   paper_size: PaperSize | null
   layout_ids: string[] // Ordered array of layout UUIDs, length = page_count
+  page_colors: string[] // Ordered array of hex colors, length = page_count
   thumbnail_url: string | null
   preview_images: string[] | null // JSONB array
   is_featured: boolean
@@ -125,6 +126,7 @@ export interface CreateTemplateInput {
   page_count: PageCount
   paper_size: PaperSize
   layout_ids: string[] // Ordered array of layout UUIDs, length must equal page_count
+  page_colors: string[] // Ordered array of hex colors, length must equal page_count
   thumbnail_url?: string
   preview_images?: string[]
   is_featured?: boolean
@@ -138,6 +140,7 @@ export interface UpdateTemplateInput {
   page_count?: PageCount
   paper_size?: PaperSize
   layout_ids?: string[]
+  page_colors?: string[] // Ordered array of hex colors
   thumbnail_url?: string
   preview_images?: string[]
   is_featured?: boolean

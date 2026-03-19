@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useReducer, useCallback } from "react"
 import type { Project, Page, PageZone, Element, EditorState, EditorAction, UploadedPhoto, UpdateElementInput, UpdateZoneInput, CreateZoneInput, Zone } from "@/types/editor"
-import { updateProject, updateElement, createElement, deleteElement } from "@/lib/editor-actions"
+import { updateProject, updateElement, createElement, deleteElement, updatePage } from "@/lib/editor-actions"
 import { createZone, updateZone, deleteZone, createZones, deleteZonesForParent } from "@/lib/zone-operations"
 
 // ---------------------------------------------------------------------------
@@ -94,6 +94,16 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         project: { ...state.project, title: action.payload },
       }
+
+    case "UPDATE_PAGE_COLOR": {
+      const { pageId, color } = action.payload
+      return {
+        ...state,
+        pages: state.pages.map((page) =>
+          page.id === pageId ? { ...page, page_color: color } : page
+        ),
+      }
+    }
 
     case "ADD_PAGE":
       return {
@@ -269,6 +279,9 @@ interface EditorContextValue {
   updateProjectTitle: (title: string) => void
   saveProject: () => Promise<void>
 
+  // Page actions
+  updatePageColor: (pageId: string, color: string) => Promise<void>
+
   // Spread actions
   setCurrentSpread: (spreadIndex: number) => void
   getCurrentSpreadPages: () => [Page | null, Page | null]
@@ -337,6 +350,17 @@ export function EditorProvider({
   // Update project title
   const updateProjectTitle = useCallback((title: string) => {
     dispatch({ type: "UPDATE_PROJECT_TITLE", payload: title })
+  }, [])
+
+  // Update page color
+  const updatePageColor = useCallback(async (pageId: string, color: string) => {
+    dispatch({ type: "UPDATE_PAGE_COLOR", payload: { pageId, color } })
+    try {
+      await updatePage(pageId, { page_color: color })
+    } catch (error) {
+      console.error("Update page color error:", error)
+      dispatch({ type: "SET_ERROR", payload: "Failed to update page color" })
+    }
   }, [])
 
   // Set current spread
@@ -598,6 +622,7 @@ export function EditorProvider({
     dispatch,
     updateProjectTitle,
     saveProject,
+    updatePageColor,
     setCurrentSpread,
     getCurrentSpreadPages,
     setActivePageSide,

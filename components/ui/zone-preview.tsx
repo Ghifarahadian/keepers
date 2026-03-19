@@ -55,7 +55,7 @@ export function ZonePreview({
                 ? "var(--color-accent)"
                 : "var(--color-secondary)",
               opacity: isSelected ? 0.9 : 0.6,
-              border: isSelected ? '2px solid var(--color-primary)' : 'none',
+              border: isSelected ? '2px solid var(--color-primary)' : '1px solid rgba(0,0,0,0.15)',
             }}
             onClick={() => {
               if (mode === 'interactive' && onZoneSelect) {

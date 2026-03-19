@@ -34,7 +34,7 @@ const PageThumbnail = memo(function PageThumbnail({
   const hasContent = zones.some(zone => (elements[zone.id] || []).length > 0)
 
   return (
-    <div className="flex-1 relative overflow-hidden" style={{ backgroundColor: 'var(--color-white)', aspectRatio: '8.5 / 11' }}>
+    <div className="flex-1 relative overflow-hidden" style={{ backgroundColor: page?.page_color || 'var(--color-white)', aspectRatio: '8.5 / 11' }}>
       {zones.length === 0 ? (
         <div className="w-full h-full flex items-center justify-center">
           <span className="text-[6px]" style={{ color: 'var(--color-secondary)' }}>Empty</span>

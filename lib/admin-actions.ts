@@ -374,6 +374,7 @@ export async function createTemplate(input: {
   page_count: PageCount
   paper_size: PaperSize
   layout_ids: string[] // Ordered array of layout UUIDs, length must equal page_count
+  page_colors: string[] // Ordered array of hex colors, length must equal page_count
   is_featured?: boolean
 }) {
   const supabase = await createClient()
@@ -399,6 +400,19 @@ export async function createTemplate(input: {
     throw new Error("One or more layout IDs are invalid")
   }
 
+  // Validate page_colors array
+  if (input.page_colors.length !== input.page_count) {
+    throw new Error(`page_colors length (${input.page_colors.length}) must match page_count (${input.page_count})`)
+  }
+
+  // Validate each color is valid hex format
+  const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
+  for (let i = 0; i < input.page_colors.length; i++) {
+    if (!hexColorRegex.test(input.page_colors[i])) {
+      throw new Error(`Invalid color at index ${i}: ${input.page_colors[i]}. Must be hex format like #FFFFFF`)
+    }
+  }
+
   const { data: template, error: templateError } = await supabase
     .from("templates")
     .insert({
@@ -409,6 +423,7 @@ export async function createTemplate(input: {
       page_count: input.page_count,
       paper_size: input.paper_size,
       layout_ids: input.layout_ids,
+      page_colors: input.page_colors,
       thumbnail_url: input.thumbnail_url,
       is_featured: input.is_featured ?? false,
       is_active: true,
@@ -441,6 +456,7 @@ export async function updateTemplate(
     page_count?: PageCount
     paper_size?: PaperSize
     layout_ids?: string[]
+    page_colors?: string[]
   }
 ): Promise<void> {
   const supabase = await createClient()
@@ -475,6 +491,30 @@ export async function updateTemplate(
 
     if (existingLayouts.length !== uniqueIds.length) {
       throw new Error("One or more layout IDs are invalid")
+    }
+  }
+
+  // Validate page_colors if provided
+  if (input.page_colors !== undefined) {
+    const targetPageCount = input.page_count ?? (await (async () => {
+      const { data } = await supabase
+        .from("templates")
+        .select("page_count")
+        .eq("id", templateId)
+        .single()
+      return data?.page_count
+    })())
+
+    if (targetPageCount !== undefined && input.page_colors.length !== targetPageCount) {
+      throw new Error(`page_colors length (${input.page_colors.length}) must match page_count (${targetPageCount})`)
+    }
+
+    // Validate each color is valid hex format
+    const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
+    for (let i = 0; i < input.page_colors.length; i++) {
+      if (!hexColorRegex.test(input.page_colors[i])) {
+        throw new Error(`Invalid color at index ${i}: ${input.page_colors[i]}. Must be hex format like #FFFFFF`)
+      }
     }
   }
 
