@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useDroppable } from "@dnd-kit/core"
-import { Image, ImageMinus, Move, Type, Trash2, ZoomIn, ZoomOut } from "lucide-react"
+import { Image, Type } from "lucide-react"
 import { useZoneInteraction } from "@/lib/hooks/use-zone-interaction"
 import { useElementInteraction } from "@/lib/hooks/use-element-interaction"
 import { PhotoToolbar } from "@/components/editor/ui/photo-toolbar"
@@ -138,6 +138,14 @@ export function ZoneBox({
     if (!isSelected) {
       setIsPanMode(false)
       setIsEditing(false)
+      // Remove empty text elements when deselecting
+      if (!isPhoto && onElementDelete) {
+        elements.forEach((el) => {
+          if (el.type === "text" && !el.text_content?.trim()) {
+            onElementDelete(el.id)
+          }
+        })
+      }
     }
   }, [isSelected])
 
@@ -162,6 +170,43 @@ export function ZoneBox({
       setIsPanMode(false)
     }
   }, [isPanMode, elements.length])
+
+  // Auto-create text element when an empty text zone is selected
+  const hasAutoCreated = useRef(false)
+  useEffect(() => {
+    if (
+      isSelected &&
+      !isPhoto &&
+      isEmpty &&
+      onElementAdd &&
+      zone.id &&
+      !hasAutoCreated.current
+    ) {
+      hasAutoCreated.current = true
+      onElementAdd({
+        zone_id: zone.id as string,
+        type: "text",
+        text_content: "",
+        font_family: "var(--font-serif)",
+        font_size: 16,
+        font_color: "#2D3748",
+        font_weight: "normal",
+        font_style: "normal",
+        text_align: "center",
+        text_decoration: "none",
+        position_x: 0,
+        position_y: 0,
+        width: 100,
+        height: 100,
+        rotation: 0,
+      }).then(() => {
+        setIsEditing(true)
+      })
+    }
+    if (!isSelected) {
+      hasAutoCreated.current = false
+    }
+  }, [isSelected, isPhoto, isEmpty, onElementAdd, zone.id])
 
   const handleZoomIn = () => {
     if (photoElement && onElementUpdate) {
@@ -250,18 +295,18 @@ export function ZoneBox({
         </span>
       )}
 
-      {/* Empty photo zone prompt */}
-      {!isAdmin && isEmpty && isPhoto && (
+      {/* Empty zone prompt */}
+      {!isAdmin && isEmpty && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <p
             className="text-sm"
             style={{
-              color: 'var(--color-accent)',
+              color: isPhoto ? 'var(--color-accent)' : '#2F6F73',
               fontFamily: 'var(--font-serif)',
               opacity: 0.6,
             }}
           >
-            drag photo here
+            {isPhoto ? 'drag photo here' : 'add text here'}
           </p>
         </div>
       )}
@@ -278,120 +323,31 @@ export function ZoneBox({
           }}
         >
           {isPhoto ? (
-            <PhotoToolbar
-              actions={
-                isEmpty
-                  ? onZoneDelete
-                    ? [
-                        {
-                          icon: <Trash2 className="w-4 h-4" />,
-                          title: "Delete zone",
-                          variant: "danger",
-                          onClick: (e) => {
-                            e.stopPropagation()
-                            onZoneDelete()
-                          },
-                        },
-                      ]
-                    : []
-                  : elements.length > 0 && onElementDelete && onZoneDelete
-                  ? [
-                      {
-                        icon: <Move className="w-4 h-4" />,
-                        title: isPanMode ? "Move zone (click to switch)" : "Move photo (click to switch)",
-                        variant: "default",
-                        onClick: (e) => {
-                          e.stopPropagation()
-                          setIsPanMode(!isPanMode)
-                        },
-                        isActive: isPanMode,
-                      },
-                      {
-                        icon: <ZoomIn className="w-4 h-4" />,
-                        title: "Zoom in",
-                        variant: "default",
-                        onClick: (e) => {
-                          e.stopPropagation()
-                          handleZoomIn()
-                        },
-                      },
-                      {
-                        icon: <ZoomOut className="w-4 h-4" />,
-                        title: "Zoom out",
-                        variant: "default",
-                        onClick: (e) => {
-                          e.stopPropagation()
-                          handleZoomOut()
-                        },
-                      },
-                      {
-                        icon: <ImageMinus className="w-4 h-4" />,
-                        title: "Remove photo",
-                        variant: "default",
-                        onClick: (e) => {
-                          e.stopPropagation()
-                          onElementDelete(elements[0].id)
-                        },
-                      },
-                      {
-                        icon: <Trash2 className="w-4 h-4" />,
-                        title: "Delete zone",
-                        variant: "danger",
-                        onClick: (e) => {
-                          e.stopPropagation()
-                          onZoneDelete()
-                        },
-                      },
-                    ]
-                  : []
-              }
-            />
+            onZoneDelete && (
+              <PhotoToolbar
+                isEmpty={isEmpty}
+                isPanMode={isPanMode}
+                onTogglePanMode={() => setIsPanMode(!isPanMode)}
+                onZoomIn={handleZoomIn}
+                onZoomOut={handleZoomOut}
+                onRemovePhoto={() => {
+                  if (onElementDelete && elements[0]) onElementDelete(elements[0].id)
+                }}
+                onDeleteZone={onZoneDelete}
+              />
+            )
           ) : (
-            <>
-              {isEmpty ? (
-                <PhotoToolbar
-                  actions={[
-                    {
-                      icon: <Type className="w-4 h-4" />,
-                      title: "Add text",
-                      variant: "default",
-                      onClick: async (e) => {
-                        e.stopPropagation()
-                        if (!onElementAdd || !zone.id) return
-                        await onElementAdd({
-                          zone_id: zone.id as string,
-                          type: "text",
-                          text_content: "",
-                          font_family: "var(--font-serif)",
-                          font_size: 16,
-                          font_color: "#2D3748",
-                          font_weight: "normal",
-                          font_style: "normal",
-                          text_align: "center",
-                          text_decoration: "none",
-                          position_x: 0,
-                          position_y: 0,
-                          width: 100,
-                          height: 100,
-                          rotation: 0,
-                        })
-                        setIsEditing(true)
-                      },
-                    },
-                  ]}
-                />
-              ) : (
-                elements.length > 0 &&
-                onElementUpdate &&
-                onElementDelete && (
-                  <TextToolbar
-                    element={elements[0]}
-                    onUpdate={(updates) => onElementUpdate(elements[0].id, updates)}
-                    onDelete={() => onElementDelete(elements[0].id)}
-                  />
-                )
-              )}
-            </>
+            elements.length > 0 &&
+            onElementUpdate &&
+            onElementDelete && (
+              <TextToolbar
+                element={elements[0]}
+                onUpdate={(updates) => onElementUpdate(elements[0].id, updates)}
+                onDelete={() => onElementDelete(elements[0].id)}
+                isEditing={isEditing}
+                onEditText={() => setIsEditing(!isEditing)}
+              />
+            )
           )}
         </div>,
         document.body

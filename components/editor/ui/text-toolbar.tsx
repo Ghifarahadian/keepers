@@ -2,12 +2,14 @@
 
 import type { Element, UpdateElementInput } from "@/types/editor"
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, ChevronDown, Trash2 } from "lucide-react"
+import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, ChevronDown, Trash2, Pencil } from "lucide-react"
 
 interface TextToolbarProps {
   element: Element
   onUpdate: (updates: UpdateElementInput) => void
   onDelete: () => void
+  isEditing?: boolean
+  onEditText?: () => void
 }
 
 const FONT_OPTIONS = [
@@ -18,7 +20,7 @@ const FONT_OPTIONS = [
 
 const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72]
 
-export function TextToolbar({ element, onUpdate, onDelete }: TextToolbarProps) {
+export function TextToolbar({ element, onUpdate, onDelete, isEditing, onEditText }: TextToolbarProps) {
   const [showFontDropdown, setShowFontDropdown] = useState(false)
   const [showSizeDropdown, setShowSizeDropdown] = useState(false)
   const fontDropdownRef = useRef<HTMLDivElement>(null)
@@ -93,6 +95,26 @@ export function TextToolbar({ element, onUpdate, onDelete }: TextToolbarProps) {
       onClick={stopPropagation}
       onMouseDown={stopPropagation}
     >
+      {/* Edit Text Button */}
+      {onEditText && (
+        <button
+          onClick={onEditText}
+          className={`p-1.5 rounded transition-colors ${
+            isEditing ? '' : 'hover:bg-gray-100'
+          }`}
+          style={{
+            backgroundColor: isEditing ? 'var(--color-accent-light)' : undefined,
+            color: isEditing ? 'var(--color-accent)' : undefined
+          }}
+          title="Edit text"
+        >
+          <Pencil size={14} />
+        </button>
+      )}
+
+      {/* Divider */}
+      {onEditText && <div className="w-px h-5 bg-gray-200 mx-0.5" />}
+
       {/* Font Family Dropdown */}
       <div className="relative" ref={fontDropdownRef}>
         <button

@@ -5,6 +5,7 @@ import { useEditor } from "@/lib/contexts/editor-context"
 import type { Layout } from "@/types/editor"
 import { getLayouts } from "@/lib/layout-actions"
 import { Check, Loader2, AlertCircle } from "lucide-react"
+import { ZonePreview } from "@/components/ui/zone-preview"
 
 export function LayoutsPanel() {
   const { state, getActivePage, applyLayoutToPage } = useEditor()
@@ -109,23 +110,7 @@ export function LayoutsPanel() {
             >
               <div className="flex items-start gap-3">
                 {/* Layout Preview */}
-                <div className="flex-shrink-0 w-16 h-20 border rounded relative overflow-hidden" style={{ backgroundColor: 'var(--color-white)', borderColor: 'var(--color-border)' }}>
-                  {layout.zones.map((zone, index) => (
-                    <div
-                      key={index}
-                      className={`absolute ${
-                        isActive ? "opacity-30" : ""
-                      }`}
-                      style={{
-                        left: `${zone.position_x}%`,
-                        top: `${zone.position_y}%`,
-                        width: `${zone.width}%`,
-                        height: `${zone.height}%`,
-                        backgroundColor: isActive ? 'var(--color-accent)' : 'var(--color-secondary)'
-                      }}
-                    />
-                  ))}
-                </div>
+                <ZonePreview zones={layout.zones} width="w-16" height="h-20" />
 
                 {/* Layout Info */}
                 <div className="flex-1">
