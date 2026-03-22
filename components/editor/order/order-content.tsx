@@ -1,7 +1,8 @@
 "use client"
 
+import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Book, Gift, User, Mail, MapPin, Phone, FileText, Ruler, Download, Package } from "lucide-react"
+import { ArrowLeft, Book, Gift, User, Mail, MapPin, Phone, FileText, Ruler, Download, Package, Loader } from "lucide-react"
 import type { Project } from "@/types/editor"
 import type { UserProfile } from "@/types/auth"
 import { getStatusBadgeColors } from "@/components/editor/modals/project-selector"
@@ -13,12 +14,24 @@ interface OrderContentProps {
 
 export function OrderContent({ project, userProfile }: OrderContentProps) {
   const router = useRouter()
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [exportProgress, setExportProgress] = useState<{ current: number; total: number } | null>(null)
 
-  const handleDownloadPDF = () => {
-    if (project.status === "draft") {
-      return
+  const handleDownloadPDF = async () => {
+    if (project.status === "draft" || isGenerating) return
+    setIsGenerating(true)
+    setExportProgress(null)
+    try {
+      const { exportProjectToPdf } = await import("@/lib/pdf-export")
+      await exportProjectToPdf(project, (current, total) => {
+        setExportProgress({ current, total })
+      })
+    } catch (error) {
+      console.error("PDF export failed:", error)
+    } finally {
+      setIsGenerating(false)
+      setExportProgress(null)
     }
-    // TODO: Implement PDF download functionality
   }
 
   const isDraft = project.status === "draft"
@@ -212,7 +225,7 @@ export function OrderContent({ project, userProfile }: OrderContentProps) {
             {/* Download PDF Button */}
             <button
               onClick={handleDownloadPDF}
-              disabled={isDraft}
+              disabled={isDraft || isGenerating}
               className="w-full py-3 rounded-lg font-bold text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md flex items-center justify-center gap-2"
               style={{
                 backgroundColor: isDraft ? "var(--color-border)" : "var(--color-accent)",
@@ -221,8 +234,19 @@ export function OrderContent({ project, userProfile }: OrderContentProps) {
               }}
               title={isDraft ? "Complete your order first" : "Download PDF"}
             >
-              <Download className="w-5 h-5" />
-              {isDraft ? "Complete your order first" : "Download PDF"}
+              {isGenerating ? (
+                <>
+                  <Loader className="w-5 h-5 animate-spin" />
+                  {exportProgress
+                    ? `Generating page ${exportProgress.current} of ${exportProgress.total}...`
+                    : "Preparing PDF..."}
+                </>
+              ) : (
+                <>
+                  <Download className="w-5 h-5" />
+                  {isDraft ? "Complete your order first" : "Download PDF"}
+                </>
+              )}
             </button>
           </div>
         </div>

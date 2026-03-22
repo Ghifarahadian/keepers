@@ -9,7 +9,21 @@
       "Bash(npx supabase:*)",
       "Bash(pnpm build:*)",
       "Bash(npx next build)",
-      "WebFetch(domain:lucide.dev)"
+      "WebFetch(domain:lucide.dev)",
+      "Bash(pnpm dev:*)",
+      "Bash(cmd /c \"pnpm dev\")",
+      "Bash(cmd.exe /c \"cd C:\\\\Users\\\\Ghifari\\\\Documents\\\\keepers && pnpm dev\")",
+      "Bash(cmd.exe /c \"cd C:\\\\Users\\\\Ghifari\\\\Documents\\\\keepers && pnpm build\")",
+      "Bash(npm install:*)",
+      "Bash(echo \"PATH: $PATH\")",
+      "Read(//c/Program Files/nodejs//**)",
+      "Read(//c/Users/Ghifari/AppData/Roaming/**)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(npm --version)",
+      "Bash(pnpm --version)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:/c/Users/Ghifari/AppData/Roaming/npm:$PATH\")",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm approve-builds:*)"
     ]
   }
 }
